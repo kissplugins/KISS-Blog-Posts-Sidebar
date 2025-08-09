@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.0.1
+ * Version: 1.0.5
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -13,7 +13,20 @@
  *
  * --- CHANGELOG ---
  *
- * 1.0.1 (2025-08-09) - Gemini
+ * 1.0.5 (2025-08-09)
+ * - Add: Added a convenient link to WordPress's Media Settings page in the widget configuration and on the main plugins page.
+ *
+ * 1.0.4 (2025-08-09)
+ * - Add: Implemented an optional debug mode, available via a new switch on the settings page.
+ *
+ * 1.0.3 (2025-08-09)
+ * - Fix: Resolved an issue where featured images would not display due to HTML parsing conflicts with quotes in inline styles.
+ * - Remove: Removed temporary on-screen debugging code.
+ *
+ * 1.0.2 (2025-08-09)
+ * - Add: Implemented on-screen debugging and cache-busting to diagnose persistent featured image issue.
+ *
+ * 1.0.1 (2025-08-09)
  * - Fix: Modified the REST API callback to more reliably fetch featured image URLs.
  */
 
@@ -23,7 +36,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.0.1');
+define('KISS_BLOG_POSTS_VERSION', '1.0.5');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -71,9 +84,13 @@ class KISSBlogPostsSidebar {
             true
         );
         
+        $options = get_option('kiss_blog_posts_options');
+        $debug_mode = !empty($options['debug_mode']) ? true : false;
+        
         wp_localize_script('kiss-blog-posts-script', 'kissBlogs', array(
             'restUrl' => rest_url('kiss-blog-posts/v1/'),
-            'nonce' => wp_create_nonce('wp_rest')
+            'nonce' => wp_create_nonce('wp_rest'),
+            'debug' => $debug_mode
         ));
     }
     
@@ -225,18 +242,35 @@ class KISSBlogPostsSidebar {
             'kiss-blog-posts',
             'kiss_blog_posts_styling'
         );
+        
+        // Debugging Section
+        add_settings_section(
+            'kiss_blog_posts_debugging',
+            __('Debugging', 'kiss-blog-posts'),
+            array($this, 'debugging_section_callback'),
+            'kiss-blog-posts'
+        );
+        
+        add_settings_field(
+            'debug_mode',
+            __('Enable Debug Mode', 'kiss-blog-posts'),
+            array($this, 'debug_mode_callback'),
+            'kiss-blog-posts',
+            'kiss_blog_posts_debugging'
+        );
     }
     
     public function sanitize_options($input) {
         $sanitized = array();
         
-        $sanitized['border_radius'] = absint($input['border_radius']);
-        $sanitized['shadow_blur'] = absint($input['shadow_blur']);
-        $sanitized['shadow_spread'] = absint($input['shadow_spread']);
-        $sanitized['shadow_color'] = sanitize_hex_color($input['shadow_color']);
-        $sanitized['shadow_opacity'] = floatval($input['shadow_opacity']);
-        $sanitized['tile_spacing'] = absint($input['tile_spacing']);
-        $sanitized['content_padding'] = absint($input['content_padding']);
+        $sanitized['border_radius'] = isset($input['border_radius']) ? absint($input['border_radius']) : 8;
+        $sanitized['shadow_blur'] = isset($input['shadow_blur']) ? absint($input['shadow_blur']) : 10;
+        $sanitized['shadow_spread'] = isset($input['shadow_spread']) ? absint($input['shadow_spread']) : 2;
+        $sanitized['shadow_color'] = isset($input['shadow_color']) ? sanitize_hex_color($input['shadow_color']) : '#000000';
+        $sanitized['shadow_opacity'] = isset($input['shadow_opacity']) ? floatval($input['shadow_opacity']) : 0.1;
+        $sanitized['tile_spacing'] = isset($input['tile_spacing']) ? absint($input['tile_spacing']) : 20;
+        $sanitized['content_padding'] = isset($input['content_padding']) ? absint($input['content_padding']) : 15;
+        $sanitized['debug_mode'] = !empty($input['debug_mode']) ? 1 : 0;
         
         // Ensure opacity is between 0 and 1
         if ($sanitized['shadow_opacity'] < 0) $sanitized['shadow_opacity'] = 0;
@@ -298,6 +332,17 @@ class KISSBlogPostsSidebar {
         echo '<input type="number" name="kiss_blog_posts_options[content_padding]" value="' . esc_attr($value) . '" min="5" max="50" />';
         echo '<p class="description">' . __('Set the padding inside each tile content area (5-50px)', 'kiss-blog-posts') . '</p>';
     }
+
+    public function debugging_section_callback() {
+        echo '<p>' . __('Use these settings to help troubleshoot issues with the plugin.', 'kiss-blog-posts') . '</p>';
+    }
+    
+    public function debug_mode_callback() {
+        $options = get_option('kiss_blog_posts_options');
+        $checked = isset($options['debug_mode']) && $options['debug_mode'] ? 'checked' : '';
+        echo '<input type="checkbox" name="kiss_blog_posts_options[debug_mode]" value="1" ' . $checked . ' />';
+        echo '<p class="description">' . __('When enabled, the plugin will display raw post data in the widget for troubleshooting.', 'kiss-blog-posts') . '</p>';
+    }
     
     public function admin_page() {
         ?>
@@ -316,7 +361,11 @@ class KISSBlogPostsSidebar {
     
     public function add_settings_link($links) {
         $settings_link = '<a href="' . admin_url('options-general.php?page=kiss-blog-posts') . '">' . __('Settings', 'kiss-blog-posts') . '</a>';
+        $media_settings_link = '<a href="' . admin_url('options-media.php') . '">' . __('WP Thumbnail Settings', 'kiss-blog-posts') . '</a>';
+        
+        array_unshift($links, $media_settings_link);
         array_unshift($links, $settings_link);
+        
         return $links;
     }
     
@@ -410,10 +459,9 @@ class KISS_Blog_Posts_Widget extends WP_Widget {
             <input class="tiny-text" id="<?php echo esc_attr($this->get_field_id('posts_count')); ?>" name="<?php echo esc_attr($this->get_field_name('posts_count')); ?>" type="number" step="1" min="1" max="20" value="<?php echo esc_attr($posts_count); ?>">
         </p>
         <p>
-            <a href="<?php echo admin_url('options-general.php?page=kiss-blog-posts'); ?>" target="_blank">
-                <?php _e('⚙️ Plugin Settings', 'kiss-blog-posts'); ?>
-            </a>
-            <br><small><?php _e('Customize appearance, spacing, and shadow effects', 'kiss-blog-posts'); ?></small>
+            <a href="<?php echo admin_url('options-general.php?page=kiss-blog-posts'); ?>" target="_blank"><?php _e('⚙️ Plugin Settings', 'kiss-blog-posts'); ?></a> | 
+            <a href="<?php echo admin_url('options-media.php'); ?>" target="_blank"><?php _e('WP Thumbnail Settings', 'kiss-blog-posts'); ?></a>
+            <br><small><?php _e('Customize appearance, spacing, and thumbnail sizes.', 'kiss-blog-posts'); ?></small>
         </p>
         <?php
     }

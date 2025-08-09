@@ -4,13 +4,20 @@ jQuery(document).ready(function($) {
         var container = $(this);
         var postsCount = container.data("posts-count") || 8;
         
+        var ajaxData = {
+            per_page: postsCount
+        };
+
+        // If debug mode is enabled, add a cache-buster.
+        if (kissBlogs.debug) {
+            ajaxData._cache_buster = new Date().getTime();
+        }
+        
         // Fetch posts via REST API
         $.ajax({
             url: kissBlogs.restUrl + "posts",
             method: "GET",
-            data: {
-                per_page: postsCount
-            },
+            data: ajaxData,
             beforeSend: function(xhr) {
                 xhr.setRequestHeader("X-WP-Nonce", kissBlogs.nonce);
             },
@@ -31,19 +38,31 @@ jQuery(document).ready(function($) {
         var html = "";
         
         posts.forEach(function(post) {
-            var imageStyle = post.featured_image ? 
-                "background-image: url(\"" + post.featured_image + "\");" : 
-                "background-color: #f0f0f0;";
+            // Construct the inline style attribute.
+            // We use single quotes for the HTML attribute and no quotes inside url()
+            // to create the most robust and parseable HTML string.
+            var styleAttr = "";
+            if (post.featured_image) {
+                styleAttr = "style='background-image: url(" + post.featured_image + ")'";
+            } else {
+                styleAttr = "style='background-color: #f0f0f0'";
+            }
             
             html += "<div class=\"kiss-blog-posts-tile\" onclick=\"window.location.href='" + post.link + "'\">";
-            html += "<div class=\"tile-image\" style=\"" + imageStyle + "\"></div>";
-            html += "<div class=\"tile-content\">";
-            html += "<h3 class=\"tile-title\"><a href=\"" + post.link + "\">" + post.title + "</a></h3>";
-            if (post.excerpt) {
-                html += "<p class=\"tile-excerpt\">" + post.excerpt + "</p>";
+            html += "  <div class=\"tile-image\" " + styleAttr + "></div>";
+            html += "  <div class=\"tile-content\">";
+
+            // If debug mode is enabled, print the raw post object.
+            if (kissBlogs.debug) {
+                html += "<pre style='font-size: 10px; line-height: 1.2; word-wrap: break-word; white-space: pre-wrap; background: #fff; color: #000; padding: 10px; border: 1px dashed red; margin-bottom: 10px;'>" + JSON.stringify(post, null, 2) + "</pre>";
             }
-            html += "<p class=\"tile-date\">" + post.date + "</p>";
-            html += "</div>";
+
+            html += "    <h3 class=\"tile-title\"><a href=\"" + post.link + "\">" + post.title + "</a></h3>";
+            if (post.excerpt) {
+                html += "    <p class=\"tile-excerpt\">" + post.excerpt + "</p>";
+            }
+            html += "    <p class=\"tile-date\">" + post.date + "</p>";
+            html += "  </div>";
             html += "</div>";
         });
         
