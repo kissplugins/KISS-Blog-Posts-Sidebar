@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.0.5
+ * Version: 1.0.6
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -12,6 +12,9 @@
  * Domain Path: /languages
  *
  * --- CHANGELOG ---
+ *
+ * 1.0.6 (2025-08-09)
+ * - Add: Added a console log "ping" when debug mode is active to help diagnose script loading issues on production sites.
  *
  * 1.0.5 (2025-08-09)
  * - Add: Added a convenient link to WordPress's Media Settings page in the widget configuration and on the main plugins page.
@@ -36,7 +39,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.0.5');
+define('KISS_BLOG_POSTS_VERSION', '1.0.6');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 

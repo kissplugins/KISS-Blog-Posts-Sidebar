@@ -1,5 +1,11 @@
 /* KISS Blog Posts Sidebar JavaScript */
 jQuery(document).ready(function($) {
+    // --- START DEBUG PING ---
+    if (typeof kissBlogs !== 'undefined' && kissBlogs.debug) {
+        console.log('KISS Blog Posts: Debug mode is ON. Script is loading.');
+    }
+    // --- END DEBUG PING ---
+
     $(".kiss-blog-posts-container").each(function() {
         var container = $(this);
         var postsCount = container.data("posts-count") || 8;
@@ -9,7 +15,7 @@ jQuery(document).ready(function($) {
         };
 
         // If debug mode is enabled, add a cache-buster.
-        if (kissBlogs.debug) {
+        if (typeof kissBlogs !== 'undefined' && kissBlogs.debug) {
             ajaxData._cache_buster = new Date().getTime();
         }
         
@@ -39,8 +45,6 @@ jQuery(document).ready(function($) {
         
         posts.forEach(function(post) {
             // Construct the inline style attribute.
-            // We use single quotes for the HTML attribute and no quotes inside url()
-            // to create the most robust and parseable HTML string.
             var styleAttr = "";
             if (post.featured_image) {
                 styleAttr = "style='background-image: url(" + post.featured_image + ")'";
@@ -53,7 +57,7 @@ jQuery(document).ready(function($) {
             html += "  <div class=\"tile-content\">";
 
             // If debug mode is enabled, print the raw post object.
-            if (kissBlogs.debug) {
+            if (typeof kissBlogs !== 'undefined' && kissBlogs.debug) {
                 html += "<pre style='font-size: 10px; line-height: 1.2; word-wrap: break-word; white-space: pre-wrap; background: #fff; color: #000; padding: 10px; border: 1px dashed red; margin-bottom: 10px;'>" + JSON.stringify(post, null, 2) + "</pre>";
             }
 
