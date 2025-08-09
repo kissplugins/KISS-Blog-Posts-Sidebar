@@ -1,0 +1,14 @@
+/* KISS Blog Posts Admin Styles */
+.kiss-blog-posts-admin .form-table th {
+    font-weight: 600;
+}
+
+.kiss-blog-posts-admin input[type="number"],
+.kiss-blog-posts-admin input[type="color"] {
+    max-width: 100px;
+}
+
+.kiss-blog-posts-admin .description {
+    font-style: italic;
+    color: #666;
+}
