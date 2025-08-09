@@ -1,15 +1,33 @@
 <?php
 /**
- * Plugin Name: KISS Blog Posts Sidebar - Claude Edition
- * Plugin URI: https://github.com/kissplugins/KISS-Blog-Posts-Sidebar
+ * Plugin Name: KISS Blog Posts Sidebar - Claude
+ * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.0.0
+ * Version: 1.0.5
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: kiss-blog-posts
  * Domain Path: /languages
+ *
+ * --- CHANGELOG ---
+ *
+ * 1.0.5 (2025-08-09)
+ * - Add: Added a convenient link to WordPress's Media Settings page in the widget configuration and on the main plugins page.
+ *
+ * 1.0.4 (2025-08-09)
+ * - Add: Implemented an optional debug mode, available via a new switch on the settings page.
+ *
+ * 1.0.3 (2025-08-09)
+ * - Fix: Resolved an issue where featured images would not display due to HTML parsing conflicts with quotes in inline styles.
+ * - Remove: Removed temporary on-screen debugging code.
+ *
+ * 1.0.2 (2025-08-09)
+ * - Add: Implemented on-screen debugging and cache-busting to diagnose persistent featured image issue.
+ *
+ * 1.0.1 (2025-08-09)
+ * - Fix: Modified the REST API callback to more reliably fetch featured image URLs.
  */
 
 // Prevent direct access
@@ -18,7 +36,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.0.0');
+define('KISS_BLOG_POSTS_VERSION', '1.0.5');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -66,9 +84,13 @@ class KISSBlogPostsSidebar {
             true
         );
         
+        $options = get_option('kiss_blog_posts_options');
+        $debug_mode = !empty($options['debug_mode']) ? true : false;
+        
         wp_localize_script('kiss-blog-posts-script', 'kissBlogs', array(
             'restUrl' => rest_url('kiss-blog-posts/v1/'),
-            'nonce' => wp_create_nonce('wp_rest')
+            'nonce' => wp_create_nonce('wp_rest'),
+            'debug' => $debug_mode
         ));
     }
     
@@ -110,14 +132,24 @@ class KISSBlogPostsSidebar {
         $posts = get_posts(array(
             'numberposts' => $per_page,
             'post_status' => 'publish',
-            'post_type' => 'post',
-            'meta_key' => '_thumbnail_id'
+            'post_type' => 'post'
         ));
         
         $formatted_posts = array();
         
         foreach ($posts as $post) {
-            $featured_image = get_the_post_thumbnail_url($post->ID, 'medium');
+            // Get featured image URL more reliably by checking multiple sizes.
+            $featured_image = '';
+            $thumbnail_id = get_post_thumbnail_id($post->ID);
+            if ($thumbnail_id) {
+                $featured_image = wp_get_attachment_image_url($thumbnail_id, 'medium');
+                if (!$featured_image) {
+                    $featured_image = wp_get_attachment_image_url($thumbnail_id, 'thumbnail');
+                }
+                if (!$featured_image) {
+                    $featured_image = wp_get_attachment_image_url($thumbnail_id, 'full');
+                }
+            }
             
             $formatted_posts[] = array(
                 'id' => $post->ID,
@@ -186,15 +218,63 @@ class KISSBlogPostsSidebar {
             'kiss-blog-posts',
             'kiss_blog_posts_styling'
         );
+        
+        add_settings_field(
+            'shadow_opacity',
+            __('Shadow Opacity', 'kiss-blog-posts'),
+            array($this, 'shadow_opacity_callback'),
+            'kiss-blog-posts',
+            'kiss_blog_posts_styling'
+        );
+        
+        add_settings_field(
+            'tile_spacing',
+            __('Vertical Spacing Between Tiles (px)', 'kiss-blog-posts'),
+            array($this, 'tile_spacing_callback'),
+            'kiss-blog-posts',
+            'kiss_blog_posts_styling'
+        );
+        
+        add_settings_field(
+            'content_padding',
+            __('Content Padding (px)', 'kiss-blog-posts'),
+            array($this, 'content_padding_callback'),
+            'kiss-blog-posts',
+            'kiss_blog_posts_styling'
+        );
+        
+        // Debugging Section
+        add_settings_section(
+            'kiss_blog_posts_debugging',
+            __('Debugging', 'kiss-blog-posts'),
+            array($this, 'debugging_section_callback'),
+            'kiss-blog-posts'
+        );
+        
+        add_settings_field(
+            'debug_mode',
+            __('Enable Debug Mode', 'kiss-blog-posts'),
+            array($this, 'debug_mode_callback'),
+            'kiss-blog-posts',
+            'kiss_blog_posts_debugging'
+        );
     }
     
     public function sanitize_options($input) {
         $sanitized = array();
         
-        $sanitized['border_radius'] = absint($input['border_radius']);
-        $sanitized['shadow_blur'] = absint($input['shadow_blur']);
-        $sanitized['shadow_spread'] = absint($input['shadow_spread']);
-        $sanitized['shadow_color'] = sanitize_hex_color($input['shadow_color']);
+        $sanitized['border_radius'] = isset($input['border_radius']) ? absint($input['border_radius']) : 8;
+        $sanitized['shadow_blur'] = isset($input['shadow_blur']) ? absint($input['shadow_blur']) : 10;
+        $sanitized['shadow_spread'] = isset($input['shadow_spread']) ? absint($input['shadow_spread']) : 2;
+        $sanitized['shadow_color'] = isset($input['shadow_color']) ? sanitize_hex_color($input['shadow_color']) : '#000000';
+        $sanitized['shadow_opacity'] = isset($input['shadow_opacity']) ? floatval($input['shadow_opacity']) : 0.1;
+        $sanitized['tile_spacing'] = isset($input['tile_spacing']) ? absint($input['tile_spacing']) : 20;
+        $sanitized['content_padding'] = isset($input['content_padding']) ? absint($input['content_padding']) : 15;
+        $sanitized['debug_mode'] = !empty($input['debug_mode']) ? 1 : 0;
+        
+        // Ensure opacity is between 0 and 1
+        if ($sanitized['shadow_opacity'] < 0) $sanitized['shadow_opacity'] = 0;
+        if ($sanitized['shadow_opacity'] > 1) $sanitized['shadow_opacity'] = 1;
         
         return $sanitized;
     }
@@ -226,9 +306,42 @@ class KISSBlogPostsSidebar {
     
     public function shadow_color_callback() {
         $options = get_option('kiss_blog_posts_options');
-        $value = isset($options['shadow_color']) ? $options['shadow_color'] : '#00000020';
+        $value = isset($options['shadow_color']) ? $options['shadow_color'] : '#000000';
         echo '<input type="color" name="kiss_blog_posts_options[shadow_color]" value="' . esc_attr($value) . '" />';
-        echo '<p class="description">' . __('Choose the shadow color', 'kiss-blog-posts') . '</p>';
+        echo '<p class="description">' . __('Choose the shadow color (opacity set separately)', 'kiss-blog-posts') . '</p>';
+    }
+    
+    public function shadow_opacity_callback() {
+        $options = get_option('kiss_blog_posts_options');
+        $value = isset($options['shadow_opacity']) ? $options['shadow_opacity'] : 0.1;
+        echo '<input type="range" name="kiss_blog_posts_options[shadow_opacity]" value="' . esc_attr($value) . '" min="0" max="1" step="0.1" oninput="this.nextElementSibling.value=this.value" />';
+        echo '<output>' . esc_attr($value) . '</output>';
+        echo '<p class="description">' . __('Set the shadow opacity (0 = transparent, 1 = solid)', 'kiss-blog-posts') . '</p>';
+    }
+    
+    public function tile_spacing_callback() {
+        $options = get_option('kiss_blog_posts_options');
+        $value = isset($options['tile_spacing']) ? $options['tile_spacing'] : 20;
+        echo '<input type="number" name="kiss_blog_posts_options[tile_spacing]" value="' . esc_attr($value) . '" min="0" max="100" />';
+        echo '<p class="description">' . __('Set the vertical spacing between tiles (0-100px)', 'kiss-blog-posts') . '</p>';
+    }
+    
+    public function content_padding_callback() {
+        $options = get_option('kiss_blog_posts_options');
+        $value = isset($options['content_padding']) ? $options['content_padding'] : 15;
+        echo '<input type="number" name="kiss_blog_posts_options[content_padding]" value="' . esc_attr($value) . '" min="5" max="50" />';
+        echo '<p class="description">' . __('Set the padding inside each tile content area (5-50px)', 'kiss-blog-posts') . '</p>';
+    }
+
+    public function debugging_section_callback() {
+        echo '<p>' . __('Use these settings to help troubleshoot issues with the plugin.', 'kiss-blog-posts') . '</p>';
+    }
+    
+    public function debug_mode_callback() {
+        $options = get_option('kiss_blog_posts_options');
+        $checked = isset($options['debug_mode']) && $options['debug_mode'] ? 'checked' : '';
+        echo '<input type="checkbox" name="kiss_blog_posts_options[debug_mode]" value="1" ' . $checked . ' />';
+        echo '<p class="description">' . __('When enabled, the plugin will display raw post data in the widget for troubleshooting.', 'kiss-blog-posts') . '</p>';
     }
     
     public function admin_page() {
@@ -248,7 +361,11 @@ class KISSBlogPostsSidebar {
     
     public function add_settings_link($links) {
         $settings_link = '<a href="' . admin_url('options-general.php?page=kiss-blog-posts') . '">' . __('Settings', 'kiss-blog-posts') . '</a>';
+        $media_settings_link = '<a href="' . admin_url('options-media.php') . '">' . __('WP Thumbnail Settings', 'kiss-blog-posts') . '</a>';
+        
+        array_unshift($links, $media_settings_link);
         array_unshift($links, $settings_link);
+        
         return $links;
     }
     
@@ -257,17 +374,45 @@ class KISSBlogPostsSidebar {
         $border_radius = isset($options['border_radius']) ? $options['border_radius'] : 8;
         $shadow_blur = isset($options['shadow_blur']) ? $options['shadow_blur'] : 10;
         $shadow_spread = isset($options['shadow_spread']) ? $options['shadow_spread'] : 2;
-        $shadow_color = isset($options['shadow_color']) ? $options['shadow_color'] : '#00000020';
+        $shadow_color = isset($options['shadow_color']) ? $options['shadow_color'] : '#000000';
+        $shadow_opacity = isset($options['shadow_opacity']) ? $options['shadow_opacity'] : 0.1;
+        $tile_spacing = isset($options['tile_spacing']) ? $options['tile_spacing'] : 20;
+        $content_padding = isset($options['content_padding']) ? $options['content_padding'] : 15;
+        
+        // Convert hex color to rgba with opacity
+        $shadow_color_rgba = self::hex_to_rgba($shadow_color, $shadow_opacity);
         
         return "
+        .kiss-blog-posts-container {
+            gap: {$tile_spacing}px !important;
+        }
         .kiss-blog-posts-tile {
             border-radius: {$border_radius}px !important;
-            box-shadow: 0 4px {$shadow_blur}px {$shadow_spread}px {$shadow_color} !important;
+            box-shadow: 0 4px {$shadow_blur}px {$shadow_spread}px {$shadow_color_rgba} !important;
         }
         .kiss-blog-posts-tile .tile-image {
             border-radius: {$border_radius}px {$border_radius}px 0 0 !important;
         }
+        .kiss-blog-posts-tile .tile-content {
+            padding: {$content_padding}px !important;
+        }
         ";
+    }
+    
+    private static function hex_to_rgba($hex, $opacity) {
+        $hex = str_replace('#', '', $hex);
+        
+        if (strlen($hex) == 3) {
+            $r = hexdec(substr($hex, 0, 1) . substr($hex, 0, 1));
+            $g = hexdec(substr($hex, 1, 1) . substr($hex, 1, 1));
+            $b = hexdec(substr($hex, 2, 1) . substr($hex, 2, 1));
+        } else {
+            $r = hexdec(substr($hex, 0, 2));
+            $g = hexdec(substr($hex, 2, 2));
+            $b = hexdec(substr($hex, 4, 2));
+        }
+        
+        return "rgba($r, $g, $b, $opacity)";
     }
 }
 
@@ -312,6 +457,11 @@ class KISS_Blog_Posts_Widget extends WP_Widget {
         <p>
             <label for="<?php echo esc_attr($this->get_field_id('posts_count')); ?>"><?php _e('Number of posts:', 'kiss-blog-posts'); ?></label>
             <input class="tiny-text" id="<?php echo esc_attr($this->get_field_id('posts_count')); ?>" name="<?php echo esc_attr($this->get_field_name('posts_count')); ?>" type="number" step="1" min="1" max="20" value="<?php echo esc_attr($posts_count); ?>">
+        </p>
+        <p>
+            <a href="<?php echo admin_url('options-general.php?page=kiss-blog-posts'); ?>" target="_blank"><?php _e('⚙️ Plugin Settings', 'kiss-blog-posts'); ?></a> | 
+            <a href="<?php echo admin_url('options-media.php'); ?>" target="_blank"><?php _e('WP Thumbnail Settings', 'kiss-blog-posts'); ?></a>
+            <br><small><?php _e('Customize appearance, spacing, and thumbnail sizes.', 'kiss-blog-posts'); ?></small>
         </p>
         <?php
     }
