@@ -1,5 +1,45 @@
 # KISS Blog Posts Sidebar - Changelog
 
+## Version 1.1.0 (2025-08-12) - Phase 2: Backend Reliability & Easy Wins
+
+### 🔧 PHASE 2 IMPROVEMENTS - Backend Reliability & Diagnostics
+
+#### Self-Diagnostic Testing System
+- **Added**: Comprehensive self-diagnostic tests in plugin settings
+- **Added**: 4 automated tests to prevent code regressions:
+  1. **REST API Endpoint Test** - Verifies API accessibility and data validity
+  2. **JavaScript Dependencies Test** - Checks file existence and proper sizing
+  3. **Database Performance Test** - Measures query performance and memory usage
+  4. **Settings Validation Test** - Validates plugin configuration integrity
+- **Added**: Real-time test execution with detailed results and status indicators
+- **Added**: Color-coded results (Pass/Warning/Fail) with actionable feedback
+
+#### Enhanced Admin Interface
+- **Added**: Tabbed admin interface (Settings | Changelog)
+- **Added**: Changelog viewer with markdown rendering support
+- **Added**: "Changelog" link in All Plugins page for easy access
+- **Added**: Integration with `kiss_mdv_render_file()` function for markdown display
+- **Added**: Fallback plain text rendering when markdown renderer unavailable
+
+#### Backend Reliability Improvements
+- **Enhanced**: AJAX handling for diagnostic tests with proper nonce verification
+- **Enhanced**: Admin permission checks and security validation
+- **Enhanced**: Error handling and user feedback systems
+- **Enhanced**: Settings validation with comprehensive checks
+
+### Technical Implementation
+- **Admin Interface**: Tabbed navigation with clean separation of concerns
+- **AJAX System**: Secure diagnostic test execution with progress feedback
+- **File Integration**: Smart markdown rendering with graceful fallbacks
+- **Security**: Proper nonce verification and permission checks for all admin actions
+
+### Usage
+1. **Run Diagnostics**: Go to Settings > KISS Blog Posts > Settings > "Run All Tests"
+2. **View Changelog**: Go to Settings > KISS Blog Posts > Changelog tab
+3. **Quick Access**: Use "Changelog" link in All Plugins page
+
+---
+
 ## Version 1.0.11 (2025-08-12) - Widget Title Link Feature
 
 ### ✨ NEW FEATURE - Clickable Widget Title
