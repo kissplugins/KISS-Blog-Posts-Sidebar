@@ -1,5 +1,20 @@
 # KISS Blog Posts Sidebar - Changelog
 
+## Version 1.0.10 (2025-08-12) - Public Access Fix
+
+### 🚨 CRITICAL ACCESS FIX
+- **Fixed**: "Access denied. Please refresh the page." error for non-logged-in users
+- **Issue**: Overly restrictive permission check was blocking public access to published posts
+- **Solution**: Removed `current_user_can('read')` check since published posts should be publicly accessible
+- **Impact**: Widget now works correctly for all visitors, not just logged-in users
+
+### Technical Details
+- **File**: kiss-blog-posts-sidebar.php
+- **Change**: Removed permission check in `get_posts_rest()` method
+- **Reasoning**: Published posts are public content and the REST API endpoint already has `permission_callback => '__return_true'`
+
+---
+
 ## Version 1.0.9 (2025-08-12) - HTML Entity Decoding Fix
 
 ### 🔧 CONTENT DISPLAY FIX

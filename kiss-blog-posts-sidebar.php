@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.0.9
+ * Version: 1.0.10
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -12,6 +12,9 @@
  * Domain Path: /languages
  *
  * --- CHANGELOG ---
+ *
+ * 1.0.10 (2025-08-12)
+ * - Fix: "Access denied. Please refresh the page." error for non-logged-in users (removed overly restrictive permission check)
  *
  * 1.0.9 (2025-08-12)
  * - Fix: HTML entities in post titles and excerpts not being decoded properly (&#8217; &#8220; &#8211; &#038; etc.)
@@ -52,7 +55,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.0.9');
+define('KISS_BLOG_POSTS_VERSION', '1.0.10');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -160,14 +163,9 @@ class KISSBlogPostsSidebar {
                 );
             }
 
-            // Check if we can access posts
-            if (!current_user_can('read')) {
-                return new WP_Error(
-                    'insufficient_permissions',
-                    'Insufficient permissions to read posts.',
-                    array('status' => 403)
-                );
-            }
+            // Note: Removed permission check since we're only serving published posts
+            // which should be publicly accessible. The REST API permission_callback
+            // is already set to '__return_true' for public access.
 
             // Get posts with error handling
             $posts = get_posts(array(
