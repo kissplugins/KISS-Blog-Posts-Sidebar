@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -12,6 +12,14 @@
  * Domain Path: /languages
  *
  * --- CHANGELOG ---
+ *
+ * 1.1.1 (2025-08-12) - Cache Optimization & Compatibility
+ * - Add: Client-side caching with 5-minute cache duration
+ * - Add: Server-side cache headers (Cache-Control, ETag, Last-Modified)
+ * - Add: Automatic cache invalidation when posts are updated
+ * - Add: Nonce refresh mechanism for cached pages
+ * - Add: localStorage-based response caching
+ * - Fix: Cache-friendly AJAX requests and error handling
  *
  * 1.1.0 (2025-08-12) - Phase 2: Backend Reliability & Easy Wins
  * - Add: Self-diagnostic tests in plugin settings to prevent regressions
@@ -67,7 +75,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.1.0');
+define('KISS_BLOG_POSTS_VERSION', '1.1.1');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -96,6 +104,12 @@ class KISSBlogPostsSidebar {
 
         // AJAX hooks
         add_action('wp_ajax_kiss_blog_posts_diagnostics', array($this, 'handle_diagnostics_ajax'));
+
+        // Cache invalidation hooks
+        add_action('save_post', array($this, 'invalidate_cache_on_post_update'));
+        add_action('delete_post', array($this, 'invalidate_cache_on_post_update'));
+        add_action('wp_trash_post', array($this, 'invalidate_cache_on_post_update'));
+        add_action('untrash_post', array($this, 'invalidate_cache_on_post_update'));
     }
     
     public function init() {
@@ -240,7 +254,26 @@ class KISSBlogPostsSidebar {
                 error_log('KISS Blog Posts: Successfully returning ' . count($formatted_posts) . ' posts');
             }
 
-            return rest_ensure_response($formatted_posts);
+            // Add cache-friendly headers
+            $response = rest_ensure_response($formatted_posts);
+
+            // Set cache headers (5 minutes for posts, longer for static content)
+            $response->header('Cache-Control', 'public, max-age=300'); // 5 minutes
+            $response->header('Expires', gmdate('D, d M Y H:i:s', time() + 300) . ' GMT');
+            $response->header('Last-Modified', gmdate('D, d M Y H:i:s', time()) . ' GMT');
+
+            // Add ETag for better cache validation
+            $etag = md5(serialize($formatted_posts) . KISS_BLOG_POSTS_VERSION);
+            $response->header('ETag', '"' . $etag . '"');
+
+            // Check if client has cached version
+            $client_etag = isset($_SERVER['HTTP_IF_NONE_MATCH']) ? trim($_SERVER['HTTP_IF_NONE_MATCH'], '"') : '';
+            if ($client_etag === $etag) {
+                $response->set_status(304); // Not Modified
+                $response->set_data('');
+            }
+
+            return $response;
 
         } catch (Exception $e) {
             error_log('KISS Blog Posts: Exception in get_posts_rest: ' . $e->getMessage());
@@ -879,6 +912,34 @@ class KISSBlogPostsSidebar {
         $html .= '</div>';
 
         return $html;
+    }
+
+    /**
+     * Invalidate cache when posts are updated
+     */
+    public function invalidate_cache_on_post_update($post_id) {
+        // Only invalidate for published posts
+        if (get_post_type($post_id) !== 'post') {
+            return;
+        }
+
+        $post_status = get_post_status($post_id);
+        if ($post_status !== 'publish' && $post_status !== 'trash') {
+            return;
+        }
+
+        // Set a transient to signal cache invalidation
+        set_transient('kiss_blog_posts_cache_invalidated', time(), 3600);
+
+        // If using object cache, clear it
+        if (function_exists('wp_cache_flush')) {
+            wp_cache_delete('kiss_blog_posts_*', 'kiss_blog_posts');
+        }
+
+        // Log cache invalidation in debug mode
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('KISS Blog Posts: Cache invalidated due to post update (ID: ' . $post_id . ')');
+        }
     }
     
     public function add_settings_link($links) {
