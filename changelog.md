@@ -1,5 +1,47 @@
 # KISS Blog Posts Sidebar - Changelog
 
+## Version 1.0.11 (2025-08-12) - Widget Title Link Feature
+
+### ✨ NEW FEATURE - Clickable Widget Title
+- **Added**: Widget title link setting in widget configuration
+- **Feature**: Make the widget title clickable with a custom URL
+- **Supports**: Both relative paths (`/blog`) and full URLs (`https://example.com/blog`)
+- **Security**: URL validation and sanitization to prevent malicious links
+
+### Technical Implementation
+- **Widget Form**: Added "Title Link URL" input field with helpful placeholder text
+- **URL Validation**:
+  - Relative paths: Must start with `/` and contain only safe characters
+  - Full URLs: Must be valid HTTP/HTTPS URLs only
+  - Invalid URLs are silently ignored (title remains non-clickable)
+- **CSS Styling**: Added hover effects for title links
+- **Accessibility**: Proper link semantics and color transitions
+
+### Usage
+1. Go to **Appearance > Widgets** or **Appearance > Customize > Widgets**
+2. Find your KISS Blog Posts widget
+3. Enter a URL in the "Title Link URL" field:
+   - Relative: `/blog` or `/category/news`
+   - Full URL: `https://yourblog.com/all-posts`
+4. Save the widget
+
+---
+
+## Version 1.0.10 (2025-08-12) - Public Access Fix
+
+### 🚨 CRITICAL ACCESS FIX
+- **Fixed**: "Access denied. Please refresh the page." error for non-logged-in users
+- **Issue**: Overly restrictive permission check was blocking public access to published posts
+- **Solution**: Removed `current_user_can('read')` check since published posts should be publicly accessible
+- **Impact**: Widget now works correctly for all visitors, not just logged-in users
+
+### Technical Details
+- **File**: kiss-blog-posts-sidebar.php
+- **Change**: Removed permission check in `get_posts_rest()` method
+- **Reasoning**: Published posts are public content and the REST API endpoint already has `permission_callback => '__return_true'`
+
+---
+
 ## Version 1.0.9 (2025-08-12) - HTML Entity Decoding Fix
 
 ### 🔧 CONTENT DISPLAY FIX

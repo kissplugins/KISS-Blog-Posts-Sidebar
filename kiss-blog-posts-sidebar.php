@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.0.9
+ * Version: 1.0.11
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -12,6 +12,14 @@
  * Domain Path: /languages
  *
  * --- CHANGELOG ---
+ *
+ * 1.0.11 (2025-08-12)
+ * - Add: Widget title link setting - allows making the widget title clickable with custom URL
+ * - Add: Support for relative paths (/blog) and full URLs (https://example.com/blog)
+ * - Add: URL validation and sanitization for security
+ *
+ * 1.0.10 (2025-08-12)
+ * - Fix: "Access denied. Please refresh the page." error for non-logged-in users (removed overly restrictive permission check)
  *
  * 1.0.9 (2025-08-12)
  * - Fix: HTML entities in post titles and excerpts not being decoded properly (&#8217; &#8220; &#8211; &#038; etc.)
@@ -52,7 +60,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.0.9');
+define('KISS_BLOG_POSTS_VERSION', '1.0.11');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -160,14 +168,9 @@ class KISSBlogPostsSidebar {
                 );
             }
 
-            // Check if we can access posts
-            if (!current_user_can('read')) {
-                return new WP_Error(
-                    'insufficient_permissions',
-                    'Insufficient permissions to read posts.',
-                    array('status' => 403)
-                );
-            }
+            // Note: Removed permission check since we're only serving published posts
+            // which should be publicly accessible. The REST API permission_callback
+            // is already set to '__return_true' for public access.
 
             // Get posts with error handling
             $posts = get_posts(array(
@@ -539,9 +542,20 @@ class KISS_Blog_Posts_Widget extends WP_Widget {
     
     public function widget($args, $instance) {
         echo $args['before_widget'];
-        
+
         if (!empty($instance['title'])) {
-            echo $args['before_title'] . apply_filters('widget_title', $instance['title']) . $args['after_title'];
+            $title = apply_filters('widget_title', $instance['title']);
+            $title_url = !empty($instance['title_url']) ? $instance['title_url'] : '';
+
+            if (!empty($title_url)) {
+                // Sanitize and validate the URL
+                $safe_url = $this->sanitize_title_url($title_url);
+                if ($safe_url) {
+                    $title = '<a href="' . esc_url($safe_url) . '" class="kiss-blog-posts-title-link">' . esc_html($title) . '</a>';
+                }
+            }
+
+            echo $args['before_title'] . $title . $args['after_title'];
         }
         
         $posts_count = !empty($instance['posts_count']) ? $instance['posts_count'] : 8;
@@ -558,6 +572,7 @@ class KISS_Blog_Posts_Widget extends WP_Widget {
     
     public function form($instance) {
         $title = !empty($instance['title']) ? $instance['title'] : __('Recent Blog Posts', 'kiss-blog-posts');
+        $title_url = !empty($instance['title_url']) ? $instance['title_url'] : '';
         $posts_count = !empty($instance['posts_count']) ? $instance['posts_count'] : 8;
         ?>
         <p>
@@ -565,11 +580,16 @@ class KISS_Blog_Posts_Widget extends WP_Widget {
             <input class="widefat" id="<?php echo esc_attr($this->get_field_id('title')); ?>" name="<?php echo esc_attr($this->get_field_name('title')); ?>" type="text" value="<?php echo esc_attr($title); ?>">
         </p>
         <p>
+            <label for="<?php echo esc_attr($this->get_field_id('title_url')); ?>"><?php _e('Title Link URL (optional):', 'kiss-blog-posts'); ?></label>
+            <input class="widefat" id="<?php echo esc_attr($this->get_field_id('title_url')); ?>" name="<?php echo esc_attr($this->get_field_name('title_url')); ?>" type="text" value="<?php echo esc_attr($title_url); ?>" placeholder="<?php _e('/blog or https://example.com/blog', 'kiss-blog-posts'); ?>">
+            <small class="description"><?php _e('Make the widget title clickable. Supports relative paths (/blog) or full URLs (https://example.com).', 'kiss-blog-posts'); ?></small>
+        </p>
+        <p>
             <label for="<?php echo esc_attr($this->get_field_id('posts_count')); ?>"><?php _e('Number of posts:', 'kiss-blog-posts'); ?></label>
             <input class="tiny-text" id="<?php echo esc_attr($this->get_field_id('posts_count')); ?>" name="<?php echo esc_attr($this->get_field_name('posts_count')); ?>" type="number" step="1" min="1" max="20" value="<?php echo esc_attr($posts_count); ?>">
         </p>
         <p>
-            <a href="<?php echo admin_url('options-general.php?page=kiss-blog-posts'); ?>" target="_blank"><?php _e('⚙️ Plugin Settings', 'kiss-blog-posts'); ?></a> | 
+            <a href="<?php echo admin_url('options-general.php?page=kiss-blog-posts'); ?>" target="_blank"><?php _e('⚙️ Plugin Settings', 'kiss-blog-posts'); ?></a> |
             <a href="<?php echo admin_url('options-media.php'); ?>" target="_blank"><?php _e('WP Thumbnail Settings', 'kiss-blog-posts'); ?></a>
             <br><small><?php _e('Customize appearance, spacing, and thumbnail sizes.', 'kiss-blog-posts'); ?></small>
         </p>
@@ -579,8 +599,40 @@ class KISS_Blog_Posts_Widget extends WP_Widget {
     public function update($new_instance, $old_instance) {
         $instance = array();
         $instance['title'] = (!empty($new_instance['title'])) ? sanitize_text_field($new_instance['title']) : '';
+        $instance['title_url'] = (!empty($new_instance['title_url'])) ? $this->sanitize_title_url($new_instance['title_url']) : '';
         $instance['posts_count'] = (!empty($new_instance['posts_count'])) ? absint($new_instance['posts_count']) : 8;
         return $instance;
+    }
+
+    /**
+     * Sanitize and validate title URL
+     */
+    private function sanitize_title_url($url) {
+        if (empty($url)) {
+            return '';
+        }
+
+        $url = trim($url);
+
+        // Handle relative paths
+        if (strpos($url, '/') === 0) {
+            // Relative path - validate it doesn't contain dangerous characters
+            if (preg_match('/^\/[a-zA-Z0-9\/_-]*$/', $url)) {
+                return $url;
+            }
+            return '';
+        }
+
+        // Handle full URLs
+        if (filter_var($url, FILTER_VALIDATE_URL)) {
+            // Additional security check - only allow http/https
+            $parsed = parse_url($url);
+            if (isset($parsed['scheme']) && in_array($parsed['scheme'], array('http', 'https'))) {
+                return esc_url_raw($url);
+            }
+        }
+
+        return '';
     }
 }
 
