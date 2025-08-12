@@ -99,6 +99,18 @@
     border: 1px solid #e0e0e0;
 }
 
+/* Widget title link styling */
+.kiss-blog-posts-title-link {
+    text-decoration: none;
+    color: inherit;
+    transition: color 0.2s ease;
+}
+
+.kiss-blog-posts-title-link:hover {
+    color: #0073aa;
+    text-decoration: none;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .kiss-blog-posts-container {
