@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.0.6
+ * Version: 1.0.9
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -12,6 +12,19 @@
  * Domain Path: /languages
  *
  * --- CHANGELOG ---
+ *
+ * 1.0.9 (2025-08-12)
+ * - Fix: HTML entities in post titles and excerpts not being decoded properly (&#8217; &#8220; &#8211; &#038; etc.)
+ *
+ * 1.0.8 (2025-08-12)
+ * - Fix: Critical JavaScript syntax error causing "Unexpected keyword 'function'" error
+ *
+ * 1.0.7 (2025-08-12)
+ * - Add: Enhanced error handling with detailed error messages and retry functionality
+ * - Add: Script dependency validation and graceful degradation
+ * - Add: Comprehensive data validation and safe HTML rendering
+ * - Add: Loading timeout handling and progressive error recovery
+ * - Fix: Widget breaking when dependencies are missing or API fails
  *
  * 1.0.6 (2025-08-09)
  * - Add: Added a console log "ping" when debug mode is active to help diagnose script loading issues on production sites.
@@ -39,7 +52,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.0.6');
+define('KISS_BLOG_POSTS_VERSION', '1.0.9');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -130,41 +143,135 @@ class KISSBlogPostsSidebar {
     }
     
     public function get_posts_rest($request) {
-        $per_page = $request->get_param('per_page');
-        
-        $posts = get_posts(array(
-            'numberposts' => $per_page,
-            'post_status' => 'publish',
-            'post_type' => 'post'
-        ));
-        
-        $formatted_posts = array();
-        
-        foreach ($posts as $post) {
-            // Get featured image URL more reliably by checking multiple sizes.
-            $featured_image = '';
-            $thumbnail_id = get_post_thumbnail_id($post->ID);
-            if ($thumbnail_id) {
-                $featured_image = wp_get_attachment_image_url($thumbnail_id, 'medium');
-                if (!$featured_image) {
-                    $featured_image = wp_get_attachment_image_url($thumbnail_id, 'thumbnail');
-                }
-                if (!$featured_image) {
-                    $featured_image = wp_get_attachment_image_url($thumbnail_id, 'full');
-                }
+        try {
+            // Enhanced error logging for debugging
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('KISS Blog Posts: REST API called with params: ' . print_r($request->get_params(), true));
             }
-            
-            $formatted_posts[] = array(
-                'id' => $post->ID,
-                'title' => get_the_title($post->ID),
-                'link' => get_permalink($post->ID),
-                'featured_image' => $featured_image ?: '',
-                'excerpt' => wp_trim_words(get_the_excerpt($post->ID), 15),
-                'date' => get_the_date('F j, Y', $post->ID)
+
+            $per_page = $request->get_param('per_page');
+
+            // Enhanced parameter validation
+            if (!is_numeric($per_page) || $per_page < 1 || $per_page > 20) {
+                return new WP_Error(
+                    'invalid_parameter',
+                    'Invalid per_page parameter. Must be between 1 and 20.',
+                    array('status' => 400)
+                );
+            }
+
+            // Check if we can access posts
+            if (!current_user_can('read')) {
+                return new WP_Error(
+                    'insufficient_permissions',
+                    'Insufficient permissions to read posts.',
+                    array('status' => 403)
+                );
+            }
+
+            // Get posts with error handling
+            $posts = get_posts(array(
+                'numberposts' => $per_page,
+                'post_status' => 'publish',
+                'post_type' => 'post',
+                'suppress_filters' => false
+            ));
+
+            // Check if get_posts failed
+            if (is_wp_error($posts)) {
+                error_log('KISS Blog Posts: get_posts failed: ' . $posts->get_error_message());
+                return new WP_Error(
+                    'posts_query_failed',
+                    'Failed to retrieve posts from database.',
+                    array('status' => 500)
+                );
+            }
+
+            $formatted_posts = array();
+
+            foreach ($posts as $post) {
+                // Validate post object
+                if (!$post || !isset($post->ID)) {
+                    continue;
+                }
+
+                // Get featured image URL with enhanced error handling
+                $featured_image = $this->get_safe_featured_image($post->ID);
+
+                // Safely get post data with fallbacks
+                $post_title = get_the_title($post->ID);
+                $post_link = get_permalink($post->ID);
+                $post_excerpt = get_the_excerpt($post->ID);
+                $post_date = get_the_date('F j, Y', $post->ID);
+
+                // Validate required fields
+                if (empty($post_title) || empty($post_link)) {
+                    if (defined('WP_DEBUG') && WP_DEBUG) {
+                        error_log('KISS Blog Posts: Skipping post ID ' . $post->ID . ' due to missing title or link');
+                    }
+                    continue;
+                }
+
+                $formatted_posts[] = array(
+                    'id' => intval($post->ID),
+                    'title' => html_entity_decode(sanitize_text_field($post_title), ENT_QUOTES, 'UTF-8'),
+                    'link' => esc_url($post_link),
+                    'featured_image' => esc_url($featured_image),
+                    'excerpt' => html_entity_decode(sanitize_text_field(wp_trim_words($post_excerpt, 15)), ENT_QUOTES, 'UTF-8'),
+                    'date' => sanitize_text_field($post_date)
+                );
+            }
+
+            // Log successful response for debugging
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('KISS Blog Posts: Successfully returning ' . count($formatted_posts) . ' posts');
+            }
+
+            return rest_ensure_response($formatted_posts);
+
+        } catch (Exception $e) {
+            error_log('KISS Blog Posts: Exception in get_posts_rest: ' . $e->getMessage());
+            return new WP_Error(
+                'server_error',
+                'An unexpected error occurred while retrieving posts.',
+                array('status' => 500)
             );
         }
-        
-        return rest_ensure_response($formatted_posts);
+    }
+
+    /**
+     * Safely get featured image URL with fallbacks
+     */
+    private function get_safe_featured_image($post_id) {
+        try {
+            $featured_image = '';
+            $thumbnail_id = get_post_thumbnail_id($post_id);
+
+            if ($thumbnail_id) {
+                // Try different image sizes in order of preference
+                $sizes = array('medium', 'thumbnail', 'large', 'full');
+
+                foreach ($sizes as $size) {
+                    $featured_image = wp_get_attachment_image_url($thumbnail_id, $size);
+                    if ($featured_image) {
+                        break;
+                    }
+                }
+
+                // Validate the URL
+                if ($featured_image && !filter_var($featured_image, FILTER_VALIDATE_URL)) {
+                    $featured_image = '';
+                }
+            }
+
+            return $featured_image;
+
+        } catch (Exception $e) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('KISS Blog Posts: Error getting featured image for post ' . $post_id . ': ' . $e->getMessage());
+            }
+            return '';
+        }
     }
     
     // Admin functions
