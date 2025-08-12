@@ -76,18 +76,27 @@
         });
     }
 
-    // Enhanced post loading with retry logic
+    // Enhanced post loading with retry logic and caching
     function loadPosts(container, postsCount, $, retryCount) {
         retryCount = retryCount || 0;
         var maxRetries = 3;
         var retryDelay = Math.pow(2, retryCount) * 1000; // Exponential backoff
 
+        // Check for cached data first (5 minute cache)
+        var cacheKey = 'kiss_blog_posts_' + postsCount;
+        var cachedData = getCachedData(cacheKey, 5 * 60 * 1000); // 5 minutes
+
+        if (cachedData && !kissBlogs.debug) {
+            renderPosts(container, cachedData, $);
+            return;
+        }
+
         var ajaxData = {
             per_page: postsCount
         };
 
-        // Add cache-buster in debug mode
-        if (kissBlogs.debug) {
+        // Add cache-buster in debug mode or for retry attempts
+        if (kissBlogs.debug || retryCount > 0) {
             ajaxData._cache_buster = new Date().getTime();
         }
 
@@ -96,14 +105,24 @@
             container.html('<div class="kiss-blog-posts-loading">Loading posts...</div>');
         }
 
-        // AJAX request with enhanced error handling
+        // AJAX request with enhanced error handling and caching
         $.ajax({
             url: kissBlogs.restUrl + "posts",
             method: "GET",
             data: ajaxData,
             timeout: 10000, // 10 second timeout
             beforeSend: function(xhr) {
-                xhr.setRequestHeader("X-WP-Nonce", kissBlogs.nonce);
+                // Try to refresh nonce if it might be stale
+                if (isNonceStale()) {
+                    refreshNonce(function(newNonce) {
+                        if (newNonce) {
+                            kissBlogs.nonce = newNonce;
+                        }
+                        xhr.setRequestHeader("X-WP-Nonce", kissBlogs.nonce);
+                    });
+                } else {
+                    xhr.setRequestHeader("X-WP-Nonce", kissBlogs.nonce);
+                }
             },
             success: function(posts, textStatus, xhr) {
                 // Validate response
@@ -113,13 +132,27 @@
                 }
 
                 if (posts && posts.length > 0) {
+                    // Cache the successful response
+                    setCachedData(cacheKey, posts);
                     renderPosts(container, posts, $);
                 } else {
                     showNoPostsMessage(container);
                 }
             },
             error: function(xhr, textStatus, errorThrown) {
-                handleError(container, textStatus, xhr, $, postsCount, retryCount);
+                // If nonce error, try to refresh and retry once
+                if (xhr.status === 403 && retryCount === 0) {
+                    refreshNonce(function(newNonce) {
+                        if (newNonce) {
+                            kissBlogs.nonce = newNonce;
+                            loadPosts(container, postsCount, $, retryCount + 1);
+                            return;
+                        }
+                        handleError(container, textStatus, xhr, $, postsCount, retryCount);
+                    });
+                } else {
+                    handleError(container, textStatus, xhr, $, postsCount, retryCount);
+                }
             }
         });
     }
@@ -337,6 +370,75 @@
         var div = document.createElement('div');
         div.innerHTML = text;
         return div.textContent || div.innerText || '';
+    }
+
+    // Client-side caching functions
+    function getCachedData(key, maxAge) {
+        if (!window.localStorage) return null;
+
+        try {
+            var cached = localStorage.getItem('kiss_blog_' + key);
+            if (!cached) return null;
+
+            var data = JSON.parse(cached);
+            var now = new Date().getTime();
+
+            if (now - data.timestamp > maxAge) {
+                localStorage.removeItem('kiss_blog_' + key);
+                return null;
+            }
+
+            return data.posts;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function setCachedData(key, posts) {
+        if (!window.localStorage) return;
+
+        try {
+            var data = {
+                posts: posts,
+                timestamp: new Date().getTime()
+            };
+            localStorage.setItem('kiss_blog_' + key, JSON.stringify(data));
+        } catch (e) {
+            // Storage quota exceeded or other error - silently fail
+        }
+    }
+
+    // Nonce management functions
+    function isNonceStale() {
+        // Check if nonce was created more than 12 hours ago
+        var nonceAge = localStorage.getItem('kiss_blog_nonce_time');
+        if (!nonceAge) return false;
+
+        var now = new Date().getTime();
+        return (now - parseInt(nonceAge)) > (12 * 60 * 60 * 1000); // 12 hours
+    }
+
+    function refreshNonce(callback) {
+        // Try to get a fresh nonce via a simple REST API call
+        jQuery.ajax({
+            url: kissBlogs.restUrl.replace('kiss-blog-posts/v1/', '') + 'wp/v2/posts?per_page=1',
+            method: 'HEAD',
+            beforeSend: function(xhr) {
+                xhr.setRequestHeader('X-WP-Nonce', wp.api.settings.nonce || '');
+            },
+            success: function(data, textStatus, xhr) {
+                var newNonce = xhr.getResponseHeader('X-WP-Nonce');
+                if (newNonce) {
+                    localStorage.setItem('kiss_blog_nonce_time', new Date().getTime().toString());
+                    callback(newNonce);
+                } else {
+                    callback(null);
+                }
+            },
+            error: function() {
+                callback(null);
+            }
+        });
     }
 
     // Initialize the plugin

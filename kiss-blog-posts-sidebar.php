@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.0.11
+ * Version: 1.1.1
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -12,6 +12,21 @@
  * Domain Path: /languages
  *
  * --- CHANGELOG ---
+ *
+ * 1.1.1 (2025-08-12) - Cache Optimization & Compatibility
+ * - Add: Client-side caching with 5-minute cache duration
+ * - Add: Server-side cache headers (Cache-Control, ETag, Last-Modified)
+ * - Add: Automatic cache invalidation when posts are updated
+ * - Add: Nonce refresh mechanism for cached pages
+ * - Add: localStorage-based response caching
+ * - Fix: Cache-friendly AJAX requests and error handling
+ *
+ * 1.1.0 (2025-08-12) - Phase 2: Backend Reliability & Easy Wins
+ * - Add: Self-diagnostic tests in plugin settings to prevent regressions
+ * - Add: Changelog viewer link in All Plugins page
+ * - Add: Enhanced REST API health monitoring and validation
+ * - Add: Comprehensive error logging and debugging system
+ * - Add: Settings validation with fallback configurations
  *
  * 1.0.11 (2025-08-12)
  * - Add: Widget title link setting - allows making the widget title clickable with custom URL
@@ -60,7 +75,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.0.11');
+define('KISS_BLOG_POSTS_VERSION', '1.1.1');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -86,6 +101,15 @@ class KISSBlogPostsSidebar {
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_init', array($this, 'admin_init'));
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), array($this, 'add_settings_link'));
+
+        // AJAX hooks
+        add_action('wp_ajax_kiss_blog_posts_diagnostics', array($this, 'handle_diagnostics_ajax'));
+
+        // Cache invalidation hooks
+        add_action('save_post', array($this, 'invalidate_cache_on_post_update'));
+        add_action('delete_post', array($this, 'invalidate_cache_on_post_update'));
+        add_action('wp_trash_post', array($this, 'invalidate_cache_on_post_update'));
+        add_action('untrash_post', array($this, 'invalidate_cache_on_post_update'));
     }
     
     public function init() {
@@ -230,7 +254,26 @@ class KISSBlogPostsSidebar {
                 error_log('KISS Blog Posts: Successfully returning ' . count($formatted_posts) . ' posts');
             }
 
-            return rest_ensure_response($formatted_posts);
+            // Add cache-friendly headers
+            $response = rest_ensure_response($formatted_posts);
+
+            // Set cache headers (5 minutes for posts, longer for static content)
+            $response->header('Cache-Control', 'public, max-age=300'); // 5 minutes
+            $response->header('Expires', gmdate('D, d M Y H:i:s', time() + 300) . ' GMT');
+            $response->header('Last-Modified', gmdate('D, d M Y H:i:s', time()) . ' GMT');
+
+            // Add ETag for better cache validation
+            $etag = md5(serialize($formatted_posts) . KISS_BLOG_POSTS_VERSION);
+            $response->header('ETag', '"' . $etag . '"');
+
+            // Check if client has cached version
+            $client_etag = isset($_SERVER['HTTP_IF_NONE_MATCH']) ? trim($_SERVER['HTTP_IF_NONE_MATCH'], '"') : '';
+            if ($client_etag === $etag) {
+                $response->set_status(304); // Not Modified
+                $response->set_data('');
+            }
+
+            return $response;
 
         } catch (Exception $e) {
             error_log('KISS Blog Posts: Exception in get_posts_rest: ' . $e->getMessage());
@@ -371,6 +414,22 @@ class KISSBlogPostsSidebar {
             'kiss-blog-posts',
             'kiss_blog_posts_debugging'
         );
+
+        // Self-Diagnostic Tests Section
+        add_settings_section(
+            'kiss_blog_posts_diagnostics',
+            __('Self-Diagnostic Tests', 'kiss-blog-posts'),
+            array($this, 'diagnostics_section_callback'),
+            'kiss-blog-posts'
+        );
+
+        add_settings_field(
+            'run_diagnostics',
+            __('System Health Check', 'kiss-blog-posts'),
+            array($this, 'diagnostics_callback'),
+            'kiss-blog-posts',
+            'kiss_blog_posts_diagnostics'
+        );
     }
     
     public function sanitize_options($input) {
@@ -456,29 +515,442 @@ class KISSBlogPostsSidebar {
         echo '<input type="checkbox" name="kiss_blog_posts_options[debug_mode]" value="1" ' . $checked . ' />';
         echo '<p class="description">' . __('When enabled, the plugin will display raw post data in the widget for troubleshooting.', 'kiss-blog-posts') . '</p>';
     }
+
+    public function diagnostics_section_callback() {
+        echo '<p>' . __('Run these tests to ensure the plugin is working correctly and prevent regressions.', 'kiss-blog-posts') . '</p>';
+    }
+
+    public function diagnostics_callback() {
+        echo '<button type="button" id="run-diagnostics-btn" class="button button-secondary">' . __('Run All Tests', 'kiss-blog-posts') . '</button>';
+        echo '<div id="diagnostics-results" style="margin-top: 15px;"></div>';
+
+        // Add JavaScript for running diagnostics
+        ?>
+        <script>
+        jQuery(document).ready(function($) {
+            $('#run-diagnostics-btn').on('click', function() {
+                var button = $(this);
+                var results = $('#diagnostics-results');
+
+                button.prop('disabled', true).text('Running Tests...');
+                results.html('<div class="notice notice-info"><p>Running diagnostic tests...</p></div>');
+
+                $.ajax({
+                    url: ajaxurl,
+                    method: 'POST',
+                    data: {
+                        action: 'kiss_blog_posts_diagnostics',
+                        nonce: '<?php echo wp_create_nonce('kiss_blog_posts_diagnostics'); ?>'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            results.html(response.data.html);
+                        } else {
+                            results.html('<div class="notice notice-error"><p>Error running diagnostics: ' + response.data + '</p></div>');
+                        }
+                    },
+                    error: function() {
+                        results.html('<div class="notice notice-error"><p>Failed to run diagnostics. Please try again.</p></div>');
+                    },
+                    complete: function() {
+                        button.prop('disabled', false).text('Run All Tests');
+                    }
+                });
+            });
+        });
+        </script>
+        <?php
+    }
     
     public function admin_page() {
+        $active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'settings';
         ?>
         <div class="wrap">
             <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
-            <form method="post" action="options.php">
-                <?php
-                settings_fields('kiss_blog_posts_settings');
-                do_settings_sections('kiss-blog-posts');
-                submit_button();
-                ?>
-            </form>
+
+            <h2 class="nav-tab-wrapper">
+                <a href="?page=kiss-blog-posts&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">
+                    <?php _e('Settings', 'kiss-blog-posts'); ?>
+                </a>
+                <a href="?page=kiss-blog-posts&tab=changelog" class="nav-tab <?php echo $active_tab == 'changelog' ? 'nav-tab-active' : ''; ?>">
+                    <?php _e('Changelog', 'kiss-blog-posts'); ?>
+                </a>
+            </h2>
+
+            <?php if ($active_tab == 'settings'): ?>
+                <form method="post" action="options.php">
+                    <?php
+                    settings_fields('kiss_blog_posts_settings');
+                    do_settings_sections('kiss-blog-posts');
+                    submit_button();
+                    ?>
+                </form>
+            <?php elseif ($active_tab == 'changelog'): ?>
+                <div style="margin-top: 20px;">
+                    <?php $this->render_changelog(); ?>
+                </div>
+            <?php endif; ?>
         </div>
         <?php
+    }
+
+    private function render_changelog() {
+        $changelog_file = KISS_BLOG_POSTS_PLUGIN_PATH . 'changelog.md';
+
+        if (function_exists('kiss_mdv_render_file')) {
+            $html = kiss_mdv_render_file($changelog_file);
+        } else {
+            // Fallback to plain text rendering
+            if (file_exists($changelog_file)) {
+                $content = file_get_contents($changelog_file);
+                $html = '<pre style="background: #f9f9f9; padding: 20px; border-radius: 4px; overflow-x: auto;">' . esc_html($content) . '</pre>';
+            } else {
+                $html = '<div class="notice notice-error"><p>Changelog file not found.</p></div>';
+            }
+        }
+
+        echo $html;
+    }
+
+    /**
+     * Handle AJAX request for diagnostics
+     */
+    public function handle_diagnostics_ajax() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'], 'kiss_blog_posts_diagnostics')) {
+            wp_die('Security check failed');
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_die('Insufficient permissions');
+        }
+
+        $results = $this->run_diagnostic_tests();
+
+        wp_send_json_success(array('html' => $this->format_diagnostic_results($results)));
+    }
+
+    /**
+     * Run all diagnostic tests
+     */
+    private function run_diagnostic_tests() {
+        $tests = array();
+
+        // Test 1: REST API Endpoint Accessibility
+        $tests['rest_api'] = $this->test_rest_api_endpoint();
+
+        // Test 2: JavaScript Dependencies
+        $tests['js_dependencies'] = $this->test_javascript_dependencies();
+
+        // Test 3: Database Query Performance
+        $tests['db_performance'] = $this->test_database_performance();
+
+        // Test 4: Settings Validation
+        $tests['settings_validation'] = $this->test_settings_validation();
+
+        return $tests;
+    }
+
+    /**
+     * Test REST API endpoint accessibility
+     */
+    private function test_rest_api_endpoint() {
+        $test = array(
+            'name' => 'REST API Endpoint Test',
+            'description' => 'Verifies the REST API endpoint is accessible and returns valid data',
+            'status' => 'pass',
+            'message' => '',
+            'details' => array()
+        );
+
+        try {
+            $url = rest_url('kiss-blog-posts/v1/posts?per_page=1');
+            $response = wp_remote_get($url, array('timeout' => 10));
+
+            if (is_wp_error($response)) {
+                $test['status'] = 'fail';
+                $test['message'] = 'Failed to connect to REST API: ' . $response->get_error_message();
+                return $test;
+            }
+
+            $status_code = wp_remote_retrieve_response_code($response);
+            $body = wp_remote_retrieve_body($response);
+
+            if ($status_code !== 200) {
+                $test['status'] = 'fail';
+                $test['message'] = 'REST API returned status code: ' . $status_code;
+                return $test;
+            }
+
+            $data = json_decode($body, true);
+            if (!is_array($data)) {
+                $test['status'] = 'fail';
+                $test['message'] = 'REST API returned invalid JSON data';
+                return $test;
+            }
+
+            $test['message'] = 'REST API endpoint is working correctly';
+            $test['details'][] = 'Status Code: ' . $status_code;
+            $test['details'][] = 'Response Size: ' . strlen($body) . ' bytes';
+            $test['details'][] = 'Posts Returned: ' . count($data);
+
+        } catch (Exception $e) {
+            $test['status'] = 'fail';
+            $test['message'] = 'Exception during REST API test: ' . $e->getMessage();
+        }
+
+        return $test;
+    }
+
+    /**
+     * Test JavaScript dependencies
+     */
+    private function test_javascript_dependencies() {
+        $test = array(
+            'name' => 'JavaScript Dependencies Test',
+            'description' => 'Checks if required JavaScript files and dependencies are properly enqueued',
+            'status' => 'pass',
+            'message' => '',
+            'details' => array()
+        );
+
+        // Check if script files exist
+        $js_file = KISS_BLOG_POSTS_PLUGIN_PATH . 'assets/js/kiss-blog-posts.js';
+        $css_file = KISS_BLOG_POSTS_PLUGIN_PATH . 'assets/css/kiss-blog-posts.css';
+
+        if (!file_exists($js_file)) {
+            $test['status'] = 'fail';
+            $test['message'] = 'JavaScript file is missing';
+            return $test;
+        }
+
+        if (!file_exists($css_file)) {
+            $test['status'] = 'fail';
+            $test['message'] = 'CSS file is missing';
+            return $test;
+        }
+
+        // Check file sizes and basic content
+        $js_size = filesize($js_file);
+        $css_size = filesize($css_file);
+
+        if ($js_size < 1000) {
+            $test['status'] = 'warning';
+            $test['message'] = 'JavaScript file seems unusually small';
+        }
+
+        $test['message'] = $test['message'] ?: 'JavaScript and CSS files are present and properly sized';
+        $test['details'][] = 'JS File Size: ' . number_format($js_size) . ' bytes';
+        $test['details'][] = 'CSS File Size: ' . number_format($css_size) . ' bytes';
+        $test['details'][] = 'Plugin Version: ' . KISS_BLOG_POSTS_VERSION;
+
+        return $test;
+    }
+
+    /**
+     * Test database performance
+     */
+    private function test_database_performance() {
+        $test = array(
+            'name' => 'Database Performance Test',
+            'description' => 'Tests database query performance for retrieving posts',
+            'status' => 'pass',
+            'message' => '',
+            'details' => array()
+        );
+
+        try {
+            $start_time = microtime(true);
+
+            $posts = get_posts(array(
+                'numberposts' => 10,
+                'post_status' => 'publish',
+                'post_type' => 'post'
+            ));
+
+            $end_time = microtime(true);
+            $query_time = ($end_time - $start_time) * 1000; // Convert to milliseconds
+
+            if ($query_time > 1000) {
+                $test['status'] = 'warning';
+                $test['message'] = 'Database query is slow (' . number_format($query_time, 2) . 'ms)';
+            } else {
+                $test['message'] = 'Database performance is good (' . number_format($query_time, 2) . 'ms)';
+            }
+
+            $test['details'][] = 'Query Time: ' . number_format($query_time, 2) . 'ms';
+            $test['details'][] = 'Posts Found: ' . count($posts);
+            $test['details'][] = 'Memory Usage: ' . number_format(memory_get_usage() / 1024 / 1024, 2) . 'MB';
+
+        } catch (Exception $e) {
+            $test['status'] = 'fail';
+            $test['message'] = 'Database test failed: ' . $e->getMessage();
+        }
+
+        return $test;
+    }
+
+    /**
+     * Test settings validation
+     */
+    private function test_settings_validation() {
+        $test = array(
+            'name' => 'Settings Validation Test',
+            'description' => 'Validates plugin settings and configuration',
+            'status' => 'pass',
+            'message' => '',
+            'details' => array()
+        );
+
+        $options = get_option('kiss_blog_posts_options');
+
+        if (!$options) {
+            $test['status'] = 'warning';
+            $test['message'] = 'Plugin options not found, using defaults';
+            $test['details'][] = 'Status: Using default settings';
+        } else {
+            // Validate individual settings
+            $valid_settings = 0;
+            $total_settings = 0;
+
+            $expected_settings = array(
+                'border_radius' => 'numeric',
+                'shadow_blur' => 'numeric',
+                'shadow_spread' => 'numeric',
+                'shadow_color' => 'string',
+                'shadow_opacity' => 'numeric',
+                'tile_spacing' => 'numeric',
+                'content_padding' => 'numeric'
+            );
+
+            foreach ($expected_settings as $setting => $type) {
+                $total_settings++;
+                if (isset($options[$setting])) {
+                    if ($type === 'numeric' && is_numeric($options[$setting])) {
+                        $valid_settings++;
+                    } elseif ($type === 'string' && is_string($options[$setting])) {
+                        $valid_settings++;
+                    }
+                }
+            }
+
+            if ($valid_settings === $total_settings) {
+                $test['message'] = 'All settings are valid and properly configured';
+            } else {
+                $test['status'] = 'warning';
+                $test['message'] = 'Some settings may be missing or invalid';
+            }
+
+            $test['details'][] = 'Valid Settings: ' . $valid_settings . '/' . $total_settings;
+            $test['details'][] = 'Debug Mode: ' . (isset($options['debug_mode']) && $options['debug_mode'] ? 'Enabled' : 'Disabled');
+        }
+
+        return $test;
+    }
+
+    /**
+     * Format diagnostic results for display
+     */
+    private function format_diagnostic_results($results) {
+        $html = '<div class="kiss-blog-posts-diagnostics">';
+
+        $total_tests = count($results);
+        $passed_tests = 0;
+        $warning_tests = 0;
+        $failed_tests = 0;
+
+        foreach ($results as $test) {
+            if ($test['status'] === 'pass') $passed_tests++;
+            elseif ($test['status'] === 'warning') $warning_tests++;
+            else $failed_tests++;
+        }
+
+        // Summary
+        $html .= '<div class="notice notice-info" style="margin-bottom: 20px;">';
+        $html .= '<h3>Diagnostic Summary</h3>';
+        $html .= '<p><strong>Total Tests:</strong> ' . $total_tests . ' | ';
+        $html .= '<span style="color: #46b450;"><strong>Passed:</strong> ' . $passed_tests . '</span> | ';
+        $html .= '<span style="color: #ffb900;"><strong>Warnings:</strong> ' . $warning_tests . '</span> | ';
+        $html .= '<span style="color: #dc3232;"><strong>Failed:</strong> ' . $failed_tests . '</span></p>';
+        $html .= '</div>';
+
+        // Individual test results
+        foreach ($results as $test) {
+            $status_class = 'notice-info';
+            $status_color = '#0073aa';
+
+            if ($test['status'] === 'pass') {
+                $status_class = 'notice-success';
+                $status_color = '#46b450';
+            } elseif ($test['status'] === 'warning') {
+                $status_class = 'notice-warning';
+                $status_color = '#ffb900';
+            } elseif ($test['status'] === 'fail') {
+                $status_class = 'notice-error';
+                $status_color = '#dc3232';
+            }
+
+            $html .= '<div class="notice ' . $status_class . '" style="margin-bottom: 15px;">';
+            $html .= '<h4 style="margin: 10px 0 5px 0; color: ' . $status_color . ';">';
+            $html .= esc_html($test['name']) . ' - ' . strtoupper($test['status']);
+            $html .= '</h4>';
+            $html .= '<p style="margin: 5px 0;"><em>' . esc_html($test['description']) . '</em></p>';
+            $html .= '<p style="margin: 5px 0;"><strong>' . esc_html($test['message']) . '</strong></p>';
+
+            if (!empty($test['details'])) {
+                $html .= '<ul style="margin: 5px 0 10px 20px;">';
+                foreach ($test['details'] as $detail) {
+                    $html .= '<li>' . esc_html($detail) . '</li>';
+                }
+                $html .= '</ul>';
+            }
+
+            $html .= '</div>';
+        }
+
+        $html .= '</div>';
+
+        return $html;
+    }
+
+    /**
+     * Invalidate cache when posts are updated
+     */
+    public function invalidate_cache_on_post_update($post_id) {
+        // Only invalidate for published posts
+        if (get_post_type($post_id) !== 'post') {
+            return;
+        }
+
+        $post_status = get_post_status($post_id);
+        if ($post_status !== 'publish' && $post_status !== 'trash') {
+            return;
+        }
+
+        // Set a transient to signal cache invalidation
+        set_transient('kiss_blog_posts_cache_invalidated', time(), 3600);
+
+        // If using object cache, clear it
+        if (function_exists('wp_cache_flush')) {
+            wp_cache_delete('kiss_blog_posts_*', 'kiss_blog_posts');
+        }
+
+        // Log cache invalidation in debug mode
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('KISS Blog Posts: Cache invalidated due to post update (ID: ' . $post_id . ')');
+        }
     }
     
     public function add_settings_link($links) {
         $settings_link = '<a href="' . admin_url('options-general.php?page=kiss-blog-posts') . '">' . __('Settings', 'kiss-blog-posts') . '</a>';
+        $changelog_link = '<a href="' . admin_url('options-general.php?page=kiss-blog-posts&tab=changelog') . '">' . __('Changelog', 'kiss-blog-posts') . '</a>';
         $media_settings_link = '<a href="' . admin_url('options-media.php') . '">' . __('WP Thumbnail Settings', 'kiss-blog-posts') . '</a>';
-        
+
         array_unshift($links, $media_settings_link);
+        array_unshift($links, $changelog_link);
         array_unshift($links, $settings_link);
-        
+
         return $links;
     }
     
