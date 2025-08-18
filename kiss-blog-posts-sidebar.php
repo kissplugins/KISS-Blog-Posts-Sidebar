@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.1.1
+ * Version: 1.2.0
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -12,6 +12,13 @@
  * Domain Path: /languages
  *
  * --- CHANGELOG ---
+ *
+ * 1.2.0 (2025-08-12) - Developer API & External Integration
+ * - Add: Public API methods for external plugin/theme integration
+ * - Add: Shortcode support for flexible placement
+ * - Add: Developer hooks and filters for customization
+ * - Add: Grid layout options (1-6 columns across)
+ * - Add: Comprehensive developer documentation
  *
  * 1.1.1 (2025-08-12) - Cache Optimization & Compatibility
  * - Add: Client-side caching with 5-minute cache duration
@@ -75,7 +82,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.1.1');
+define('KISS_BLOG_POSTS_VERSION', '1.2.0');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -96,7 +103,10 @@ class KISSBlogPostsSidebar {
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
         add_action('admin_enqueue_scripts', array($this, 'admin_enqueue_scripts'));
         add_action('rest_api_init', array($this, 'register_rest_routes'));
-        
+
+        // Shortcode support
+        add_shortcode('kiss_blog_posts', array($this, 'shortcode_handler'));
+
         // Admin hooks
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_init', array($this, 'admin_init'));
@@ -954,7 +964,17 @@ class KISSBlogPostsSidebar {
         return $links;
     }
     
-    public static function get_custom_css() {
+    /**
+     * Public method to get custom CSS (accessible to external plugins/themes)
+     */
+    public function get_custom_css() {
+        return self::get_custom_css_static();
+    }
+
+    /**
+     * Static method for backward compatibility
+     */
+    public static function get_custom_css_static() {
         $options = get_option('kiss_blog_posts_options');
         $border_radius = isset($options['border_radius']) ? $options['border_radius'] : 8;
         $shadow_blur = isset($options['shadow_blur']) ? $options['shadow_blur'] : 10;
@@ -1037,7 +1057,7 @@ class KISS_Blog_Posts_Widget extends WP_Widget {
         echo '</div>';
         
         // Add custom CSS
-        echo '<style>' . KISSBlogPostsSidebar::get_custom_css() . '</style>';
+        echo '<style>' . KISSBlogPostsSidebar::get_custom_css_static() . '</style>';
         
         echo $args['after_widget'];
     }
@@ -1105,6 +1125,123 @@ class KISS_Blog_Posts_Widget extends WP_Widget {
         }
 
         return '';
+    }
+
+    /**
+     * Shortcode handler for [kiss_blog_posts]
+     */
+    public function shortcode_handler($atts) {
+        $atts = shortcode_atts(array(
+            'count' => 8,
+            'columns' => 'auto',
+            'title' => '',
+            'title_url' => '',
+            'class' => '',
+            'style' => ''
+        ), $atts, 'kiss_blog_posts');
+
+        // Validate and sanitize attributes
+        $count = absint($atts['count']);
+        if ($count < 1 || $count > 20) {
+            $count = 8;
+        }
+
+        $columns = sanitize_text_field($atts['columns']);
+        if (!in_array($columns, array('auto', '1', '2', '3', '4', '5', '6'))) {
+            $columns = 'auto';
+        }
+
+        $title = sanitize_text_field($atts['title']);
+        $title_url = esc_url($atts['title_url']);
+        $class = sanitize_html_class($atts['class']);
+        $style = sanitize_text_field($atts['style']);
+
+        return $this->render_posts_grid($count, $columns, $title, $title_url, $class, $style);
+    }
+
+    /**
+     * Public API method to render posts grid
+     * Can be called by other plugins or themes
+     */
+    public function render_posts_grid($count = 8, $columns = 'auto', $title = '', $title_url = '', $class = '', $style = '') {
+        // Ensure scripts are enqueued
+        $this->enqueue_scripts();
+
+        $container_class = 'kiss-blog-posts-container';
+        if ($class) {
+            $container_class .= ' ' . $class;
+        }
+
+        // Apply column-specific class
+        if ($columns !== 'auto') {
+            $container_class .= ' kiss-blog-posts-columns-' . $columns;
+        }
+
+        $container_style = '';
+        if ($style) {
+            $container_style = ' style="' . esc_attr($style) . '"';
+        }
+
+        $output = '';
+
+        // Add title if provided
+        if ($title) {
+            $title_html = esc_html($title);
+            if ($title_url) {
+                $title_html = '<a href="' . esc_url($title_url) . '" class="kiss-blog-posts-title-link">' . $title_html . '</a>';
+            }
+            $output .= '<h3 class="kiss-blog-posts-title">' . $title_html . '</h3>';
+        }
+
+        // Add the posts container
+        $output .= '<div class="' . esc_attr($container_class) . '" data-posts-count="' . esc_attr($count) . '"' . $container_style . '>';
+        $output .= '<div class="kiss-blog-posts-loading">' . __('Loading posts...', 'kiss-blog-posts') . '</div>';
+        $output .= '</div>';
+
+        // Add custom CSS
+        $output .= '<style>' . $this->get_custom_css() . $this->get_column_css() . '</style>';
+
+        return $output;
+    }
+
+    /**
+     * Get column-specific CSS
+     */
+    private function get_column_css() {
+        return '
+        .kiss-blog-posts-columns-1 { grid-template-columns: 1fr !important; }
+        .kiss-blog-posts-columns-2 { grid-template-columns: repeat(2, 1fr) !important; }
+        .kiss-blog-posts-columns-3 { grid-template-columns: repeat(3, 1fr) !important; }
+        .kiss-blog-posts-columns-4 { grid-template-columns: repeat(4, 1fr) !important; }
+        .kiss-blog-posts-columns-5 { grid-template-columns: repeat(5, 1fr) !important; }
+        .kiss-blog-posts-columns-6 { grid-template-columns: repeat(6, 1fr) !important; }
+
+        @media (max-width: 1200px) {
+            .kiss-blog-posts-columns-5,
+            .kiss-blog-posts-columns-6 { grid-template-columns: repeat(4, 1fr) !important; }
+        }
+
+        @media (max-width: 900px) {
+            .kiss-blog-posts-columns-4,
+            .kiss-blog-posts-columns-5,
+            .kiss-blog-posts-columns-6 { grid-template-columns: repeat(3, 1fr) !important; }
+        }
+
+        @media (max-width: 600px) {
+            .kiss-blog-posts-columns-3,
+            .kiss-blog-posts-columns-4,
+            .kiss-blog-posts-columns-5,
+            .kiss-blog-posts-columns-6 { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+
+        @media (max-width: 400px) {
+            .kiss-blog-posts-columns-2,
+            .kiss-blog-posts-columns-3,
+            .kiss-blog-posts-columns-4,
+            .kiss-blog-posts-columns-5,
+            .kiss-blog-posts-columns-6 { grid-template-columns: 1fr !important; }
+        }
+        ';
     }
 }
 

@@ -1,5 +1,56 @@
 # KISS Blog Posts Sidebar - Changelog
 
+## Version 1.2.0 (2025-08-12) - Developer API & External Integration
+
+### 🔧 DEVELOPER API - External Plugin & Theme Integration
+
+#### Shortcode Support
+- **Added**: `[kiss_blog_posts]` shortcode for flexible placement anywhere
+- **Added**: Comprehensive shortcode parameters:
+  - `count` (1-20): Number of posts to display
+  - `columns` (auto|1|2|3|4|5|6): Grid layout options
+  - `title`: Optional title above the grid
+  - `title_url`: Optional URL to make title clickable
+  - `class`: Additional CSS class for styling
+  - `style`: Inline CSS styles
+
+#### Public API Methods
+- **Added**: `render_posts_grid()` public method for direct integration
+- **Added**: `get_custom_css()` public method for accessing plugin styles
+- **Added**: Comprehensive parameter validation and sanitization
+- **Added**: Automatic script enqueueing for external usage
+
+#### Grid Layout System
+- **Added**: 6 column layout options (1-6 columns across)
+- **Added**: Responsive grid system with automatic breakpoints
+- **Added**: Custom CSS classes for each column configuration
+- **Added**: Mobile-optimized responsive behavior
+
+#### Developer Documentation
+- **Added**: Complete `DEVELOPER-API.md` documentation file
+- **Added**: Integration examples for themes and plugins
+- **Added**: REST API usage documentation
+- **Added**: Performance best practices guide
+- **Added**: Error handling and graceful degradation examples
+
+### Technical Implementation
+- **Shortcode Handler**: Secure parameter validation and sanitization
+- **Public Methods**: Clean API for external integration
+- **CSS System**: Modular column-based responsive grid
+- **Documentation**: Comprehensive developer guide with examples
+
+### Usage Examples
+```php
+// Shortcode usage
+echo do_shortcode('[kiss_blog_posts count="6" columns="3" title="Latest News"]');
+
+// API method usage
+$plugin = KISSBlogPostsSidebar::get_instance();
+echo $plugin->render_posts_grid(6, '3', 'Latest News', '/blog');
+```
+
+---
+
 ## Version 1.1.1 (2025-08-12) - Cache Optimization & Compatibility
 
 ### 🚀 CACHE OPTIMIZATION - High Performance & Compatibility

@@ -3,7 +3,7 @@
 **Tags:** sidebar, widget, posts, recent posts, blog, simple, elegant, customizer, rest api, cache, performance, reliable  
 **Requires at least:** 5.0  
 **Tested up to:** 6.5  
-**Stable tag:** 1.1.1  
+**Stable tag:** 1.2.0
 **License:** GPL v2 or later  
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -46,6 +46,9 @@ The **KISS Blog Posts Sidebar** plugin is a professional-grade, highly reliable 
 - **Responsive Design:** Automatically adapts to different screen sizes
 
 ### 🔧 **Developer & Admin Features**
+- **Developer API:** Public methods and shortcode for external integration
+- **Shortcode Support:** `[kiss_blog_posts]` with flexible parameters
+- **Grid Layouts:** 1-6 column responsive grid options
 - **Self-Diagnostic Dashboard:** Real-time system health monitoring
 - **Enhanced Debug Mode:** Comprehensive logging and troubleshooting tools
 - **Tabbed Admin Interface:** Clean settings organization with changelog viewer
@@ -144,7 +147,57 @@ To prevent blurry images, ensure your **Medium** image size is adequate in **Set
 3. **Verify Cache Headers:** Diagnostic tests include cache validation
 4. **Test in Incognito:** Verify functionality without cached data
 
+## Developer Integration
+
+### 🔧 **For Plugin & Theme Developers**
+
+The plugin provides multiple integration methods for developers who want to reuse its functionality:
+
+#### **Shortcode Usage (Easiest)**
+```php
+// Basic usage - 8 posts in automatic grid
+echo do_shortcode('[kiss_blog_posts]');
+
+// Advanced usage - 6 posts in 3-column grid with title
+echo do_shortcode('[kiss_blog_posts count="6" columns="3" title="Latest News" title_url="/blog"]');
+```
+
+#### **Public API Methods (Recommended)**
+```php
+// Get plugin instance and render custom grid
+$plugin = KISSBlogPostsSidebar::get_instance();
+$html = $plugin->render_posts_grid(
+    6,        // count
+    '3',      // columns (1-6 or 'auto')
+    'Latest News',  // title
+    '/blog',  // title_url
+    'my-class',     // additional CSS class
+    'margin: 20px;' // inline styles
+);
+echo $html;
+```
+
+#### **Grid Layout Options**
+- **1-6 columns**: Responsive grid with automatic breakpoints
+- **Mobile optimized**: Automatically adapts to screen sizes
+- **Custom styling**: Add your own CSS classes and styles
+
+#### **Complete Documentation**
+See `DEVELOPER-API.md` for comprehensive integration examples, including:
+- Theme integration examples
+- Plugin integration patterns
+- REST API direct access
+- Error handling best practices
+- Performance optimization tips
+
 ## Recent Updates
+
+### 🔧 **Version 1.2.0 (2025-08-12) - Developer API & External Integration**
+- **Added:** Shortcode support `[kiss_blog_posts]` with flexible parameters
+- **Added:** Public API methods for external plugin/theme integration
+- **Added:** Grid layout options (1-6 columns across) with responsive design
+- **Added:** Comprehensive developer documentation (DEVELOPER-API.md)
+- **Added:** Integration examples for themes and plugins
 
 ### 🚀 **Version 1.1.1 (2025-08-12) - Cache Optimization**
 - **Added:** Client-side caching with 5-minute cache duration
