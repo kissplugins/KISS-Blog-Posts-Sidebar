@@ -295,7 +295,7 @@ class KISSBlogPostsSidebar {
 
             if ($thumbnail_id) {
                 // Try different image sizes in order of preference
-                $sizes = array('medium', 'thumbnail', 'large', 'full');
+                $sizes = array('full');
 
                 foreach ($sizes as $size) {
                     $featured_image = wp_get_attachment_image_url($thumbnail_id, $size);
