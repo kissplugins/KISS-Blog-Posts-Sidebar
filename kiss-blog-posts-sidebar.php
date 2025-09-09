@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.1.1
+ * Version: 1.2.1
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -12,6 +12,13 @@
  * Domain Path: /languages
  *
  * --- CHANGELOG ---
+ *
+ * 1.2.1 (2025-08-12) - Image Size Optimization & Developer API
+ * - Fix: Reverted thumbnail size priority to medium → thumbnail → full (was using only 'full')
+ * - Add: Developer API with shortcode support and public methods
+ * - Add: Grid layout options (1-6 columns) for external integration
+ * - Add: Comprehensive developer documentation (DEVELOPER-API.md)
+ * - Performance: Optimized image loading to reduce bandwidth usage
  *
  * 1.1.1 (2025-08-12) - Cache Optimization & Compatibility
  * - Add: Client-side caching with 5-minute cache duration
@@ -75,7 +82,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.1.1');
+define('KISS_BLOG_POSTS_VERSION', '1.2.1');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -294,8 +301,8 @@ class KISSBlogPostsSidebar {
             $thumbnail_id = get_post_thumbnail_id($post_id);
 
             if ($thumbnail_id) {
-                // Try different image sizes in order of preference
-                $sizes = array('full');
+                // Try different image sizes in order of preference (medium → thumbnail → full)
+                $sizes = array('medium', 'thumbnail', 'full');
 
                 foreach ($sizes as $size) {
                     $featured_image = wp_get_attachment_image_url($thumbnail_id, $size);
