@@ -47,11 +47,28 @@ $sizes = array('medium', 'thumbnail', 'full');  // Removed 'large' for efficienc
 - **Better UX**: Faster widget rendering and page load times
 - **SEO Improvement**: Better Core Web Vitals scores
 
-### 📊 Recommended Settings
-For optimal image quality in the widget:
-1. Go to **Settings > Media**
-2. Set **Medium size** to: `400 x 400` pixels
-3. Use **Force Regenerate Thumbnails** plugin if changing existing sites
+### 📊 SOLUTION: Preventing Blurry Images (Recommended Settings)
+
+#### **Step 1: Optimize WordPress Media Settings**
+1. Go to **Settings > Media** in WordPress admin
+2. Set **Medium size** to: `500 x 500` pixels (or larger)
+3. Check **Crop thumbnail to exact dimensions** if desired
+
+#### **Step 2: Regenerate Existing Images**
+1. Install **Force Regenerate Thumbnails** plugin
+2. Go to **Tools > Force Regenerate Thumbnails**
+3. Click **Regenerate All Thumbnails**
+
+#### **Step 3: Verify Results**
+- Widget will now use crisp 500px images instead of 300px
+- File sizes remain reasonable (50-150KB vs 1-3MB for full images)
+- Loading speed stays fast while eliminating blur
+
+#### **Why This Works Better Than Full Images:**
+- **Quality**: 500px medium images look sharp on all devices
+- **Performance**: 90% smaller than full images
+- **Mobile-Friendly**: Fast loading on slower connections
+- **SEO**: Better Core Web Vitals scores
 
 ---
 
