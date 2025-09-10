@@ -3,7 +3,7 @@
 **Tags:** sidebar, widget, posts, recent posts, blog, simple, elegant, customizer, rest api, cache, performance, reliable  
 **Requires at least:** 5.0  
 **Tested up to:** 6.5  
-**Stable tag:** 1.1.1  
+**Stable tag:** 1.2.2
 **License:** GPL v2 or later  
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -76,12 +76,16 @@ Navigate to **Settings > KISS Blog Posts** for advanced configuration:
 	- Drop Shadow (Blur, Spread, Color, Opacity)
 	- Vertical Spacing (0-100px)
 	- Content Padding (5-50px)
+- **Image Quality & Performance:**
+	- Image Size Preference (Medium vs Full)
+	- Performance vs Quality toggle with impact indicators
+	- Smart recommendations based on WordPress media settings
 - **Debugging Options:**
 	- Enable Debug Mode for troubleshooting
 	- Raw data display for diagnostic purposes
 - **Self-Diagnostic Tests:**
 	- REST API Endpoint Test
-	- JavaScript Dependencies Test  
+	- JavaScript Dependencies Test
 	- Database Performance Test
 	- Settings Validation Test
 
@@ -145,6 +149,12 @@ To prevent blurry images, ensure your **Medium** image size is adequate in **Set
 4. **Test in Incognito:** Verify functionality without cached data
 
 ## Recent Updates
+
+### 🎛️ **Version 1.2.2 (2025-08-12) - Image Size Control & User Choice**
+- **Added:** Image Size Preference setting (Medium vs Full) in plugin settings
+- **Added:** Performance vs Quality toggle with clear impact explanations
+- **Added:** Smart recommendations based on WordPress media settings
+- **Added:** Real-time file size estimates and mobile performance warnings
 
 ### 🚀 **Version 1.1.1 (2025-08-12) - Cache Optimization**
 - **Added:** Client-side caching with 5-minute cache duration

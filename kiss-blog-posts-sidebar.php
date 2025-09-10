@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.2.1
+ * Version: 1.2.2
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -12,6 +12,13 @@
  * Domain Path: /languages
  *
  * --- CHANGELOG ---
+ *
+ * 1.2.2 (2025-08-12) - Image Size Control & User Choice
+ * - Add: Image size preference setting (Medium vs Full) in plugin settings
+ * - Add: Performance vs Quality toggle with clear explanations
+ * - Add: Real-time file size estimates and recommendations
+ * - Add: Smart defaults based on WordPress media settings
+ * - UI: Enhanced settings with performance impact indicators
  *
  * 1.2.1 (2025-08-12) - Image Size Optimization & Developer API
  * - Fix: Reverted thumbnail size priority to medium → thumbnail → full (was using only 'full')
@@ -82,7 +89,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('KISS_BLOG_POSTS_VERSION', '1.2.1');
+define('KISS_BLOG_POSTS_VERSION', '1.2.2');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -301,8 +308,16 @@ class KISSBlogPostsSidebar {
             $thumbnail_id = get_post_thumbnail_id($post_id);
 
             if ($thumbnail_id) {
-                // Try different image sizes in order of preference (medium → thumbnail → full)
-                $sizes = array('medium', 'thumbnail', 'full');
+                // Get user's image size preference
+                $options = get_option('kiss_blog_posts_options');
+                $preference = isset($options['image_size_preference']) ? $options['image_size_preference'] : 'medium';
+
+                // Set image size priority based on user preference
+                if ($preference === 'full') {
+                    $sizes = array('full', 'large', 'medium', 'thumbnail');
+                } else {
+                    $sizes = array('medium', 'thumbnail', 'full');
+                }
 
                 foreach ($sizes as $size) {
                     $featured_image = wp_get_attachment_image_url($thumbnail_id, $size);
@@ -437,6 +452,22 @@ class KISSBlogPostsSidebar {
             'kiss-blog-posts',
             'kiss_blog_posts_diagnostics'
         );
+
+        // Image Quality Section
+        add_settings_section(
+            'kiss_blog_posts_image_quality',
+            __('Image Quality & Performance', 'kiss-blog-posts'),
+            array($this, 'image_quality_section_callback'),
+            'kiss-blog-posts'
+        );
+
+        add_settings_field(
+            'image_size_preference',
+            __('Image Size Preference', 'kiss-blog-posts'),
+            array($this, 'image_size_preference_callback'),
+            'kiss-blog-posts',
+            'kiss_blog_posts_image_quality'
+        );
     }
     
     public function sanitize_options($input) {
@@ -450,11 +481,16 @@ class KISSBlogPostsSidebar {
         $sanitized['tile_spacing'] = isset($input['tile_spacing']) ? absint($input['tile_spacing']) : 20;
         $sanitized['content_padding'] = isset($input['content_padding']) ? absint($input['content_padding']) : 15;
         $sanitized['debug_mode'] = !empty($input['debug_mode']) ? 1 : 0;
-        
+
+        // Image size preference
+        $sanitized['image_size_preference'] = isset($input['image_size_preference']) &&
+            in_array($input['image_size_preference'], array('medium', 'full')) ?
+            $input['image_size_preference'] : 'medium';
+
         // Ensure opacity is between 0 and 1
         if ($sanitized['shadow_opacity'] < 0) $sanitized['shadow_opacity'] = 0;
         if ($sanitized['shadow_opacity'] > 1) $sanitized['shadow_opacity'] = 1;
-        
+
         return $sanitized;
     }
     
@@ -568,7 +604,56 @@ class KISSBlogPostsSidebar {
         </script>
         <?php
     }
-    
+
+    public function image_quality_section_callback() {
+        echo '<p>' . __('Control image quality vs performance for your blog post thumbnails.', 'kiss-blog-posts') . '</p>';
+    }
+
+    public function image_size_preference_callback() {
+        $options = get_option('kiss_blog_posts_options');
+        $value = isset($options['image_size_preference']) ? $options['image_size_preference'] : 'medium';
+
+        // Get WordPress media settings for context
+        $medium_width = get_option('medium_size_w', 300);
+        $medium_height = get_option('medium_size_h', 300);
+
+        echo '<fieldset>';
+        echo '<legend class="screen-reader-text"><span>' . __('Image Size Preference', 'kiss-blog-posts') . '</span></legend>';
+
+        // Medium size option
+        echo '<label>';
+        echo '<input type="radio" name="kiss_blog_posts_options[image_size_preference]" value="medium" ' . checked($value, 'medium', false) . ' />';
+        echo ' <strong>' . __('Medium Size (Recommended)', 'kiss-blog-posts') . '</strong>';
+        echo '</label><br>';
+        echo '<div style="margin-left: 25px; margin-bottom: 15px; color: #666;">';
+        echo sprintf(__('Current size: %dx%d pixels', 'kiss-blog-posts'), $medium_width, $medium_height);
+        echo '<br>' . __('✓ Fast loading (~50-150KB per image)', 'kiss-blog-posts');
+        echo '<br>' . __('✓ Mobile-friendly', 'kiss-blog-posts');
+        echo '<br>' . __('✓ Good for most use cases', 'kiss-blog-posts');
+        if ($medium_width < 400) {
+            echo '<br><span style="color: #d63638;">⚠ Consider increasing to 400-500px in Settings > Media for sharper images</span>';
+        }
+        echo '</div>';
+
+        // Full size option
+        echo '<label>';
+        echo '<input type="radio" name="kiss_blog_posts_options[image_size_preference]" value="full" ' . checked($value, 'full', false) . ' />';
+        echo ' <strong>' . __('Full Size (Maximum Quality)', 'kiss-blog-posts') . '</strong>';
+        echo '</label><br>';
+        echo '<div style="margin-left: 25px; color: #666;">';
+        echo __('Original uploaded image size', 'kiss-blog-posts');
+        echo '<br>' . __('⚠ Slower loading (~500KB-3MB per image)', 'kiss-blog-posts');
+        echo '<br>' . __('⚠ May impact mobile performance', 'kiss-blog-posts');
+        echo '<br>' . __('✓ Maximum image quality', 'kiss-blog-posts');
+        echo '</div>';
+
+        echo '</fieldset>';
+
+        echo '<p class="description">';
+        echo __('Choose between performance (Medium) and maximum quality (Full). Medium size is recommended for most sites.', 'kiss-blog-posts');
+        echo '</p>';
+    }
+
     public function admin_page() {
         $active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'settings';
         ?>

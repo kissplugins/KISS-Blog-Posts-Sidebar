@@ -1,5 +1,40 @@
 # KISS Blog Posts Sidebar - Changelog
 
+## Version 1.2.2 (2025-08-12) - Image Size Control & User Choice
+
+### 🎛️ NEW FEATURE - Image Size Preference Setting
+
+#### User-Controlled Image Quality vs Performance
+- **Added**: Image Size Preference setting in plugin settings
+- **Options**: Medium Size (Recommended) vs Full Size (Maximum Quality)
+- **Smart UI**: Real-time display of current WordPress media settings
+- **Performance Indicators**: Clear explanations of file size and loading impact
+- **Intelligent Defaults**: Automatically recommends medium size for most users
+
+#### Enhanced Settings Interface
+- **Visual Feedback**: Shows current medium image dimensions (e.g., 300x300px)
+- **Performance Warnings**: Alerts when medium size is too small (<400px)
+- **File Size Estimates**: Displays expected file sizes for each option
+- **Mobile Impact**: Clear warnings about full-size images on mobile devices
+
+#### Technical Implementation
+```php
+// User preference controls image size priority
+if ($preference === 'full') {
+    $sizes = array('full', 'large', 'medium', 'thumbnail');  // Quality first
+} else {
+    $sizes = array('medium', 'thumbnail', 'full');          // Performance first
+}
+```
+
+#### Benefits
+- **User Choice**: Let site owners decide based on their needs
+- **Informed Decisions**: Clear explanations of trade-offs
+- **Performance Awareness**: Helps users understand impact of their choices
+- **Flexibility**: Easy to switch between options as needs change
+
+---
+
 ## Version 1.2.1 (2025-08-12) - Image Size Optimization & Performance Fix
 
 ### 🚨 IMPORTANT FIX - Thumbnail Size Priority & Blur Resolution
