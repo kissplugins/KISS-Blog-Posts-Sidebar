@@ -3,7 +3,7 @@
  * Plugin Name: KISS Blog Posts Sidebar - Claude
  * Plugin URI: https://KISSplugins.com
  * Description: A simple and elegant recent blog posts widget for your sidebar with customizable rounded corners and drop shadows.
- * Version: 1.2.1
+ * Version: 1.2.2
  * Author: KISS Plugins
  * Author URI: https://KISSplugins.com
  * License: GPL v2 or later
@@ -12,6 +12,9 @@
  * Domain Path: /languages
  *
  * --- CHANGELOG ---
+ *
+ * 1.2.2 (2025-10-01) - ADDED REMOTE UPDATE FEATURE
+ * - IMPROVED: Plugin can update in one click and show the latest update.
  *
  * 1.2.1 (2025-08-12) - Image Size Optimization & Developer API
  * - Fix: Reverted thumbnail size priority to medium → thumbnail → full (was using only 'full')
@@ -85,6 +88,18 @@ if (!defined('ABSPATH')) {
 define('KISS_BLOG_POSTS_VERSION', '1.2.1');
 define('KISS_BLOG_POSTS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('KISS_BLOG_POSTS_PLUGIN_PATH', plugin_dir_path(__FILE__));
+
+// Include the Plugin Update Checker
+require_once KISS_BLOG_POSTS_PLUGIN_PATH . 'lib/plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+$update_checker = PucFactory::buildUpdateChecker(
+    'https://github.com/kissplugins/KISS-Blog-Posts-Sidebar',
+    __FILE__,
+    'kiss-blog-posts'
+);
+// Optional: Set the branch that contains the stable release.
+$update_checker->setBranch( 'main' );
 
 class KISSBlogPostsSidebar {
     
