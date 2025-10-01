@@ -1,5 +1,9 @@
 # KISS Blog Posts Sidebar - Changelog
 
+## Version 1.2.2 - (2025-10-01) - ADDED REMOTE UPDATE FEATURE
+
+ - **IMPROVED**: Plugin can update in one click and show the latest update. 
+
 ## Version 1.2.1 (2025-08-12) - Image Size Optimization & Performance Fix
 
 ### 🚨 IMPORTANT FIX - Thumbnail Size Priority & Blur Resolution
